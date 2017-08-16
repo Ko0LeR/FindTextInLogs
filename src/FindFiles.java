@@ -11,34 +11,27 @@ import java.util.stream.Stream;
  */
 public class FindFiles {
 	/** находятся ли в файлы в обработке */
-	public static volatile boolean processing = false;
-	
+	public volatile boolean processing = false;
 	/** происходит ли сейчас обход файловой системы */
-	public static volatile boolean searching = false; 
-	
+	public volatile boolean searching = false; 
 	/** очередь для хранения путей к найденным файлам */
-	public static volatile ConcurrentLinkedQueue<Path> queue = new ConcurrentLinkedQueue<Path>();
-	
+	public volatile ConcurrentLinkedQueue<Path> queue = new ConcurrentLinkedQueue<Path>();
 	/** в скольки файлах ищется нужный текст */
-	public static volatile int filesInProgressCount = 0; 
-	
+	public volatile int filesInProgressCount = 0; 
 	/** сколько файлов обработано */
-	public static volatile int	filesDoneCount = 0;
-	
+	public volatile int	filesDoneCount = 0;
 	/** сколько всего файлов нашли с нужным расширением */
-	public static volatile int	totalFiles = 0; 
-	
+	public volatile int	totalFiles = 0; 
 	/** начальное время работы */
-	public static volatile long startedTime = System.nanoTime(); 
-	
+	public volatile long startedTime = System.nanoTime(); 
 	/** пул потоков поиска текста в файле */
-	private static ExecutorService threadPool; 
-	
+	private ExecutorService threadPool; 
 	/** текст, который необходимо найти */
-	private static String textToFind;	
-	
+	private String textToFind;	
+	/** instance для реализации синглтона */
+	private static volatile FindFiles instance;
 	/** класс для обхода файловой системы*/
-	static class TreeWalker implements FileVisitor<Path>{
+	class TreeWalker implements FileVisitor<Path>{
 		/** нужное расширение файлов */
 		private String extension;
 		
@@ -52,7 +45,7 @@ public class FindFiles {
 			if(file.toString().endsWith(extension)) { // если файл имеет нужное расширение
 				totalFiles++; // увеличиваем количество найденных файлов с таким расширением
 				threadPool.submit(() -> { // в пул добавляем новую задачу поиска текста в файле
-					FindFiles.checkFileForNeedText(file);
+					checkFileForNeedText(file);
 				});
 			}			
 			if(Thread.currentThread().isInterrupted()) 
@@ -82,20 +75,33 @@ public class FindFiles {
 		}
 	}
 	
+	/** Закрытый конструктор класса для реализации синглтона*/
+	private FindFiles() {}
+	
+	public static synchronized FindFiles getInstance() {
+		if(instance == null) {
+			synchronized(FindFiles.class) {
+				if(instance == null)
+					instance = new FindFiles();
+			}
+		}
+		return instance;
+	}
+	
 	/**
 	 * Функция начала поиска файлов
 	 * @param textToFind Текст, который необходимо найти
 	 * @param pathToDir Путь к директории, в которой будем искать
 	 * @param extension Расширение файла
 	 */
-	public static void findFilesInDirectory(String textToFind, String pathToDir, String extension) {
+	public void findFilesInDirectory(String textToFind, String pathToDir, String extension) {
 		processing = true;
 		searching = true;
 		Path path = Paths.get(pathToDir);
 		filesInProgressCount = 0;
 		filesDoneCount = 0;
 		startedTime = System.nanoTime();
-		FindFiles.textToFind = textToFind;
+		this.textToFind = textToFind;
 		queue.clear();
 		totalFiles = 0;
 		// создаём пул потоков по количеству ядер процессора
@@ -116,7 +122,7 @@ public class FindFiles {
 	 * Функция добавления пути в очередь
 	 * @param path Путь к файлу
 	 */
-	public static synchronized void addToQueue(Path path) {
+	public synchronized void addToQueue(Path path) {
 		queue.add(path);
 	}
 	
@@ -124,7 +130,7 @@ public class FindFiles {
 	 * Функция извлечения пути к файлу из очереди
 	 * @return Путь к файлу
 	 */
-	public static synchronized Path getFromQueue() {
+	public synchronized Path getFromQueue() {
 		return queue.poll();
 	}
 	
@@ -132,7 +138,7 @@ public class FindFiles {
 	 * Проверка очереди на пустоту
 	 * @return пуста ли очередь
 	 */
-	public static boolean isQueueEmpty() {
+	public boolean isQueueEmpty() {
 		return queue.isEmpty();
 	}
 	
@@ -140,7 +146,7 @@ public class FindFiles {
 	 * Функция проверки файла на содержание в нём нужного текста
 	 * @param path Путь к файлу
 	 */
-	private static void checkFileForNeedText(Path path) {
+	private void checkFileForNeedText(Path path) {
 		filesInProgressCount++;
 		// если файл найден и поток не прерван, добавляем файл в очередь
 		if(findText(path.toString(), textToFind) && !Thread.currentThread().isInterrupted())
@@ -160,7 +166,7 @@ public class FindFiles {
 	 * @param inputStr Текст, который необходимо найти
 	 * @return Найден файл или нет
 	 */
-	private static boolean findText(String path, String inputStr) {
+	private boolean findText(String path, String inputStr) {
 		try(Stream<String> stream = Files.lines(Paths.get(path))) { // создаём stream
 			return stream.anyMatch(match -> match.contains(inputStr)); // ищем первое совпадение
 		} catch (IOException e) {
@@ -170,7 +176,7 @@ public class FindFiles {
 	}
 	
 	/** Функция остановки поиска */
-	public static void stopSearch() {
+	public void stopSearch() {
 		if(threadPool != null) {
 			searching = false;
 			processing = false;

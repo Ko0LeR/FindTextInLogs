@@ -52,7 +52,7 @@ public class MainWindow {
 		shell.addDisposeListener(new DisposeListener() {
 			@Override
 			public void widgetDisposed(DisposeEvent e) {
-				FindFiles.stopSearch();
+				FindFiles.getInstance().stopSearch();
 				if(threadPool != null)
 					threadPool.shutdownNow();
 			}
@@ -119,7 +119,7 @@ public class MainWindow {
 	        		} 
 		        	else {
 		        		changeButton(false); // меняем надпись на кнопку
-		        		FindFiles.stopSearch(); // завершаем поиск
+		        		FindFiles.getInstance().stopSearch(); // завершаем поиск
 		        		if(threadPool != null) // завершаем запущенные потоки
 		        			threadPool.shutdownNow();
 		        		updateStatusBar(); // обновляем статусбар
@@ -194,10 +194,8 @@ public class MainWindow {
 			public void keyReleased(KeyEvent e) {}
 		});
 		
-		if((int)((new File(pathToFile).length()) / maxCapacity) > 1) {
-			System.out.println("AS");
+		if((int)((new File(pathToFile).length()) / maxCapacity) > 1) 
 			createPagesButtons(compositePage, textBrowser);
-		}
 		newTab.setControl(compositePage);
 		readFromFileToTextBrowser(textBrowser, pathToFile, newTab); // выводим файл
 	}
@@ -250,7 +248,7 @@ public class MainWindow {
 	 * @param newTab вкладка, в которую выводится текст
 	 * @param buttonsComposite здесь находятся кнопки
 	 */
-	private void readFromFileToTextBrowser(Text textBrowser, String pathToFile, CTabItem newTab/*, Composite buttonsComposite*/) {
+	private void readFromFileToTextBrowser(Text textBrowser, String pathToFile, CTabItem newTab) {
 		final String runningThread = "RunningThread",
 					totalPages = "TotalPages",
 					namePage = "Page";
@@ -266,7 +264,6 @@ public class MainWindow {
 		if(newTab.getData(totalPages) == null) // если ещё не указывали, сколько страниц в файле
 			newTab.setData(totalPages, (int)((new File(pathToFile).length()) / maxCapacity)); // указываем количество страниц в файле
 		if((int)newTab.getData(totalPages) > 1) { // если больше одной страницы
-			//buttonsComposite.setVisible(true); // показываем кнопки переключения страниц
 			// выводим, на какой мы сейчас странице и сколько их всего
 			buttonsStatusText.setText("Страница " + (int)newTab.getData("Page") + "/" + (int)newTab.getData(totalPages));
 			buttonsStatusText.pack(); // изменяем размер статусной строки
@@ -508,7 +505,7 @@ public class MainWindow {
 		if(threadPool != null) // останавливаем потоки
 			threadPool.shutdownNow();
 		threadPool = Executors.newFixedThreadPool(3); // устанавливаем фиксированый размер пула потоков
-		FindFiles.stopSearch(); // останавливаем текущий поиск файлов
+		FindFiles.getInstance().stopSearch(); // останавливаем текущий поиск файлов
 
 		String textToFind = inputText.getText(); // получаем текст, который надо найти
 		String extension = inputExtension.getText().replaceAll("[\\\\/:?\"<>|]", ""); // убираем из расширения ненужные символы
@@ -523,7 +520,7 @@ public class MainWindow {
 				fileSystemTree.removeAll(); // очищаем дерево файловой системы
 				
 				threadPool.submit(() -> { // запускаем поток поиска файлов
-					FindFiles.findFilesInDirectory(textToFind, selectedPath, "." + extension);
+					FindFiles.getInstance().findFilesInDirectory(textToFind, selectedPath, "." + extension);
 				});
 				
 				threadPool.submit(() -> { // запускаем поток обновления статусбара каждые 0.5 сек.
@@ -533,16 +530,16 @@ public class MainWindow {
 							Thread.sleep(500);
 						} catch (InterruptedException e) { }
 					}
-					while(!Thread.currentThread().isInterrupted() && FindFiles.processing);
+					while(!Thread.currentThread().isInterrupted() && FindFiles.getInstance().processing);
 					updateStatusBar();
 				});
 				
 				threadPool.submit(() -> { // запускаем поток обновления дерева файловой системы
-					while(!Thread.currentThread().isInterrupted() && (FindFiles.processing || !FindFiles.isQueueEmpty())) 
-						if(!FindFiles.isQueueEmpty())
+					while(!Thread.currentThread().isInterrupted() && (FindFiles.getInstance().processing || !FindFiles.getInstance().isQueueEmpty())) 
+						if(!FindFiles.getInstance().isQueueEmpty())
 							Display.getDefault().syncExec(() -> {
 								if(!Thread.currentThread().isInterrupted())
-									updateFileSystemTree(FindFiles.getFromQueue());
+									updateFileSystemTree(FindFiles.getInstance().getFromQueue());
 							});
 					Display.getDefault().syncExec(() -> {
 						if(!Thread.currentThread().isInterrupted())
@@ -608,10 +605,11 @@ public class MainWindow {
 				if(Thread.currentThread().isInterrupted() || toolBarText == null || 
 						(toolBarText != null && toolBarText.isDisposed()))
 					return;
-			toolBarText.setText("Файлов обрабатывается: " + FindFiles.filesInProgressCount + 
-								". Файлов обработано: " + FindFiles.filesDoneCount + 
-								". Времени затрачено: " + (System.nanoTime() - FindFiles.startedTime)/1_000_000_000 + " сек.");
-			if(!FindFiles.processing)
+				FindFiles instance = FindFiles.getInstance();
+			toolBarText.setText("Файлов обрабатывается: " + instance.filesInProgressCount + 
+								". Файлов обработано: " + instance.filesDoneCount + 
+								". Времени затрачено: " + (System.nanoTime() - instance.startedTime)/1_000_000_000 + " сек.");
+			if(!instance.processing)
 				toolBarText.setText(toolBarText.getText() + " Поиск завершён.");
 			});
 	}
