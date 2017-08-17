@@ -194,8 +194,9 @@ public class MainWindow {
 			public void keyReleased(KeyEvent e) {}
 		});
 		
-		if((int)((new File(pathToFile).length()) / maxCapacity) > 1) 
-			createPagesButtons(compositePage, textBrowser);
+		// Если больше 1 странцы в файле
+		if((int)((new File(pathToFile).length()) / maxCapacity)+1 > 1) 
+			createPagesButtons(compositePage, textBrowser); // создаём кнопки перехода на новую странцу
 		newTab.setControl(compositePage);
 		readFromFileToTextBrowser(textBrowser, pathToFile, newTab); // выводим файл
 	}
@@ -262,10 +263,10 @@ public class MainWindow {
 		int page = (int)newTab.getData(namePage); 
 		
 		if(newTab.getData(totalPages) == null) // если ещё не указывали, сколько страниц в файле
-			newTab.setData(totalPages, (int)((new File(pathToFile).length()) / maxCapacity)); // указываем количество страниц в файле
+			newTab.setData(totalPages, ((int)((new File(pathToFile).length()) / maxCapacity)+1)); // указываем количество страниц в файле
 		if((int)newTab.getData(totalPages) > 1) { // если больше одной страницы
 			// выводим, на какой мы сейчас странице и сколько их всего
-			buttonsStatusText.setText("Страница " + (int)newTab.getData("Page") + "/" + (int)newTab.getData(totalPages));
+			buttonsStatusText.setText("Страница " + (int)newTab.getData(namePage) + "/" + (int)newTab.getData(totalPages));
 			buttonsStatusText.pack(); // изменяем размер статусной строки
 		}
 
