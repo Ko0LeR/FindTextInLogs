@@ -1,10 +1,14 @@
+import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Stream;
 
 /**
  * Класс для осуществления поиска файлов с нужным расширением
@@ -147,12 +151,16 @@ public class FindFiles {
 	 * @param path Путь к файлу
 	 */
 	private void checkFileForNeedText(Path path) {
-		filesInProgressCount++;
+		synchronized(FindFiles.class) {
+			filesInProgressCount++;
+		}
 		// если файл найден и поток не прерван, добавляем файл в очередь
-		if(findText(path.toString(), textToFind) && !Thread.currentThread().isInterrupted())
+		if(findText(path.toString(), textToFind) != -1 && !Thread.currentThread().isInterrupted())
 			addToQueue(path);
-		filesInProgressCount--;
-		filesDoneCount++;
+		synchronized(FindFiles.class) {
+			filesInProgressCount--;
+			filesDoneCount++;
+		}
 		try {
 			Thread.sleep(100);
 		} catch (InterruptedException e) { }
@@ -161,19 +169,75 @@ public class FindFiles {
 	}
 	
 	/**
-	 * Фукнция поиска текста в файле
-	 * @param path Путь к файлу
-	 * @param inputStr Текст, который необходимо найти
-	 * @return Найден файл или нет
+	 * Функция поиска текста в файле
+	 * @param path путь к файлу
+	 * @param inputStr искомая строка
+	 * @return позиция искомой строки в файле
 	 */
-	private boolean findText(String path, String inputStr) {
-		try(Stream<String> stream = Files.lines(Paths.get(path))) { // создаём stream
-			return stream.anyMatch(match -> match.contains(inputStr)); // ищем первое совпадение
-		} catch (IOException e) {
-			e.printStackTrace();
-			return false;
+	private long findText(String path, String inputStr) {
+		int maxBts = 5_000_000; // сколько байт читаем за 1 раз
+		byte[] byteStrFromFile = new byte[5_000_000]; // сюда считываются байты из файла
+		byte[] inputStrByte = inputStr.getBytes(); // переводим строку в байты
+		long offset = 0; // смещение от начала файла
+		int resultPos = -1; // возвращаемое значение
+		long fileLength = new File(path).length(); // длина исходного файла
+		try(RandomAccessFile file = new RandomAccessFile(path, "r")){ // открываем файл для чтения
+			while(file.read(byteStrFromFile) != -1) { //считываем из файла, пока можем
+				if((resultPos = findSubArray(byteStrFromFile, inputStrByte)) != -1) { // если произошло совпадение - выходим
+					if(offset == 0)
+						return resultPos;
+					return resultPos * offset;
+				}
+				offset += maxBts / 2;  // высчитываем смещение
+				file.seek(offset); // смещаем позицию в файле
+				Arrays.fill(byteStrFromFile, (byte)0); // заполняем массив нулями
+			}
+			if(new File(path).length() > maxBts) { // если файл больше 
+				Arrays.fill(byteStrFromFile, (byte)0); // заполняем массив нулями
+				file.seek(fileLength - maxBts); // смещаемся с конца файла на размер массива
+				file.read(byteStrFromFile); 
+				if((resultPos = findSubArray(byteStrFromFile, inputStrByte)) != -1) { // если произошло совпадение - выходим
+					if(offset == 0)
+						return resultPos;
+					return resultPos * offset;
+				}
+			}
+		}catch(IOException e) {
+			return resultPos;
 		}
+		return resultPos;
 	}
+	
+	/**
+	 * Функция поиска подмассива в массиве
+	 * @param array Массив, в котором ищем
+	 * @param subarray Что ищем
+	 * @return Позиция в массиве или -1, если совпадения не было
+	 */
+	private int findSubArray(byte[] array, byte[] subarray) {
+		Queue<Integer> rememberedPos = new LinkedList <Integer>(); // здесь будем запоминать позицию в array со значением subarray[0]
+		int i = 0, k = 0;
+		for(; i < array.length && k < subarray.length; ) { // пока можем идти по массивам
+			if(array[i] == subarray[0] && k != 0) // если мы нашли байт, с которого начинается subarray и мы сейчас не в начале subarray 
+				rememberedPos.add(i); // запоминаем позицию
+			if(array[i] == subarray[k]) { // если байты равны
+				i++; //смещаемся
+				k++;
+			}
+			else {
+				k = 0;
+				if(!rememberedPos.isEmpty()) { // если у нас есть запомненная позиция
+					i = rememberedPos.poll(); // переходим в неё
+				}else
+					i++;
+			}
+		}
+		if(k == subarray.length) 
+			return i;
+		return -1;
+	}
+	
+	
 	
 	/** Функция остановки поиска */
 	public void stopSearch() {

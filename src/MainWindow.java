@@ -278,7 +278,7 @@ public class MainWindow {
 					f.skipBytes((page - 1) * maxCapacity); // смещаемся по файлу
 				Display.getDefault().syncExec(() -> { textBrowser.setText("");}); // очищаем место для текста
 				// пока поток не завершён и можно читать из файла и мы не превысили максимальное количество байт
-				while(!Thread.currentThread().isInterrupted() && f.read(bts, 0, maxElems) != -1 && i * maxElems < maxCapacity) {
+				while(!Thread.currentThread().isInterrupted() && f.read(bts) != -1 && i * maxElems < maxCapacity) {
 					i++; // сколько раз считали из файла
 					appendStr(textBrowser, bts); // добавляем строку к тексту 
 					Arrays.fill(bts, (byte)0); // заполняем массив нулями
