@@ -14,41 +14,41 @@ import org.eclipse.swt.graphics.Point;
 
 public class MainWindow {
 	
-	/** Р’С‹Р±СЂР°РЅРЅС‹Р№ РїСѓС‚СЊ РґР»СЏ РїРѕРёСЃРєР° */
+	/** Выбранный путь для поиска */
 	private String selectedPath;
-	/** РќР°Р·РІР°РЅРёРµ РѕРєРЅР° */
+	/** Название окна */
 	private String windowTitle = "Text Finder";
-	/** Р”РµСЂРµРІРѕ С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹ */
+	/** Дерево файловой системы */
 	private Tree fileSystemTree;
-	/** РҐСЂР°РЅРёР»РёС‰Рµ РІРєР»Р°РґРѕРє СЃ С‚РµРєСЃС‚РѕРј С„Р°Р№Р»Р° */
+	/** Хранилище вкладок с текстом файла */
 	private CTabFolder tabFolder;
-	/** РљРЅРѕРїРєР° РЅР°С‡Р°Р»Р° РїРѕРёСЃРєР° */
+	/** Кнопка начала поиска */
 	private Button searchButton;
-	/** РўСѓР»Р±Р°СЂ */
+	/** Тулбар */
 	private Label toolBarText;
-	/** РЎСЋРґР° РІС‹РІРѕРґРёРј, СЃРєРѕР»СЊРєРѕ СЃС‚СЂР°РЅРёС† РѕСЃС‚Р°Р»РѕСЃСЊ */
+	/** Сюда выводим, сколько страниц осталось */
 	private Label buttonsStatusText;
-	/** Р·РґРµСЃСЊ Р·Р°РїСѓСЃРєР°РµРј:
-			- РїРѕРёСЃРє С„Р°Р№Р»РѕРІ РІ РґРёСЂРµРєС‚РѕСЂРёРё
-			- РѕР±РЅРѕРІР»РµРЅРёСЏ СЃС‚Р°С‚СѓСЃР±Р°СЂР°
-			- РѕР±РЅРѕРІР»РµРЅРёРµ РґРµСЂРµРІР° С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹  */
+	/** здесь запускаем:
+			- поиск файлов в директории
+			- обновления статусбара
+			- обновление дерева файловой системы  */
 	private ExecutorService threadPool;
 	
-	private final String startSearchTextButton = "РќР°С‡Р°С‚СЊ РїРѕРёСЃРє", stopSearchTextButton = "РћСЃС‚Р°РЅРѕРІРёС‚СЊ РїРѕРёСЃРє";
+	private final String startSearchTextButton = "Начать поиск", stopSearchTextButton = "Остановить поиск";
 	
-	private final int maxElems = 1_000_000, // РєРѕР»РёС‡РµСЃС‚РІРѕ Р±Р°Р№С‚, С‡РёС‚Р°РµРјС‹С… Р·Р° 1 СЂР°Р·
-			maxCapacity = 200_000_000; // РјР°РєСЃРёРјР°Р»СЊРЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ Р±Р°Р№С‚, РєРѕС‚РѕСЂРѕРµ Р±СѓРґРµРј РІС‹РІРѕРґРёС‚СЊ РЅР° РѕРґРЅСѓ СЃС‚СЂР°РЅРёС†Сѓ
+	private final int maxElems = 1_000_000, // количество байт, читаемых за 1 раз
+			maxCapacity = 200_000_000; // максимальное количество байт, которое будем выводить на одну страницу
 	
-	/** РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ РіР»Р°РІРЅРѕРіРѕ РѕРєРЅР° РїСЂРёР»РѕР¶РµРЅРёСЏ */
+	/** Конструктор главного окна приложения */
 	public MainWindow() {		
 		final Display display = Display.getDefault();		
 		final Shell shell = new Shell();
-		shell.setSize(800, 600); // СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј РЅР°С‡Р°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РѕРєРЅР°
-		shell.setText(windowTitle); // СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј РЅР°Р·РІР°РЅРёРµ РѕРєРЅР°
-		shell.setMinimumSize(400, 300); // РІС‹СЃС‚Р°РІР»СЏРµРј РјРёРЅРёРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РѕРєРЅР°
+		shell.setSize(800, 600); // устанавливаем начальный размер окна
+		shell.setText(windowTitle); // устанавливаем название окна
+		shell.setMinimumSize(400, 300); // выставляем минимальный размер окна
 		shell.setLayout(new GridLayout());		
 		
-		// РѕР±СЂР°Р±Р°С‚С‹РІР°РµРј Р·Р°РІРµСЂС€РµРЅРёРµ СЂР°Р±РѕС‚С‹ shell
+		// обрабатываем завершение работы shell
 		shell.addDisposeListener(new DisposeListener() {
 			@Override
 			public void widgetDisposed(DisposeEvent e) {
@@ -58,8 +58,8 @@ public class MainWindow {
 			}
 		});
 		
-		createBody(shell); // СЃРѕР·РґР°С‘Рј С†РµРЅС‚СЂР°Р»СЊРЅСѓСЋ С‡Р°СЃС‚СЊ РѕРєРЅР° СЃ Tree Рё РєРѕРЅС‚РµР№РЅРµСЂРѕРј РґР»СЏ РІРєР»Р°РґРѕРє
-		createStatusBar(shell); // СЃРѕР·РґР°С‘Рј РёРЅС„РѕСЂРјР°С†РёРѕРЅРЅСѓСЋ СЃС‚СЂРѕРєСѓ
+		createBody(shell); // создаём центральную часть окна с Tree и контейнером для вкладок
+		createStatusBar(shell); // создаём информационную строку
 		
 		shell.open();
 		while (!shell.isDisposed()) 
@@ -71,7 +71,7 @@ public class MainWindow {
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ СЃРѕР·РґР°РЅРёСЏ "РІРµСЂС…СѓС€РєРё" РѕРєРЅР° - РїРѕР»СЏ РґР»СЏ РІРІРѕРґР° С‚РµРєСЃС‚Р°, СЂР°СЃС€РёСЂРµРЅРёСЏ, РєРЅРѕРїРєРё РїРѕРёСЃРєР° Рё С‚.Рґ.
+	 * Функция создания "верхушки" окна - поля для ввода текста, расширения, кнопки поиска и т.д.
 	 */
 	private void createTop(Shell shell, Composite parent) {
 	        Composite header = new Composite (parent, SWT.NONE);
@@ -79,68 +79,68 @@ public class MainWindow {
 	        header.setLayout(new GridLayout(4, false));
 	        header.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 	        
-	        new Label(header, SWT.NONE).setText("РўРµРєСЃС‚");
+	        new Label(header, SWT.NONE).setText("Текст");
 	        
-	        Text inputText = new Text(header, SWT.BORDER | SWT.SINGLE); // РїРѕР»Рµ РґР»СЏ РІРІРѕРґР° С‚РµРєСЃС‚Р°
+	        Text inputText = new Text(header, SWT.BORDER | SWT.SINGLE); // поле для ввода текста
 	        GridData gridData = new GridData(GridData.FILL, GridData.CENTER, true, false);
 	        gridData.horizontalSpan = 2;
 	        inputText.setLayoutData(gridData);
 
-	        Label label1 = new Label(header, SWT.HORIZONTAL); // РєРЅРѕРїРєР° РІС‹Р±РѕСЂР° РЅРѕРІРѕР№ РґРёСЂРµРєС‚РѕСЂРёРё
+	        Label label1 = new Label(header, SWT.HORIZONTAL); // кнопка выбора новой директории
 	        label1.setLayoutData(new GridData(SWT.FILL, SWT.FILL, false, false));
 	        label1.setImage(new Image(Display.getDefault(),".\\img\\folder.png"));
-	        label1.setToolTipText("Р’С‹Р±РѕСЂ РЅРѕРІРѕР№ РґРёСЂРµРєС‚РѕСЂРёРё");
-	        label1.addMouseListener(new MouseAdapter() { // РїСЂРё РЅР°Р¶Р°С‚РёРё РєРЅРѕРїРєРѕР№ РјС‹С€Рё - 
-	        	@Override								// РІС‹Р±РёСЂР°РµРј РЅРѕРІСѓСЋ РґРёСЂРµРєС‚РѕСЂРёСЋ
+	        label1.setToolTipText("Выбор новой директории");
+	        label1.addMouseListener(new MouseAdapter() { // при нажатии кнопкой мыши - 
+	        	@Override								// выбираем новую директорию
 	        	public void mouseDown(MouseEvent e) {
 	        		openFindPathWindow(shell); 
 	        	}
 	        });
-	        new Label(header, SWT.NONE).setText("Р Р°СЃС€РёСЂРµРЅРёРµ: *.");
+	        new Label(header, SWT.NONE).setText("Расширение: *.");
 	        
-	        Text inputExtension = new Text(header, SWT.BORDER | SWT.SINGLE); // РїРѕР»Рµ РґР»СЏ РІРІРѕРґР° СЂР°СЃС€РёСЂРµРЅРёСЏ
-	        inputExtension.setText("log"); // РёР·РЅР°С‡Р°Р»СЊРЅРѕ РёС‰РµРј С„Р°Р№Р»С‹ *.log
+	        Text inputExtension = new Text(header, SWT.BORDER | SWT.SINGLE); // поле для ввода расширения
+	        inputExtension.setText("log"); // изначально ищем файлы *.log
 	        inputExtension.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false));
 	        
-	        searchButton = new Button(header, SWT.NONE); // РєРЅРѕРїРєР° РЅР°С‡Р°Р»Р° РїРѕРёСЃРєР°
+	        searchButton = new Button(header, SWT.NONE); // кнопка начала поиска
 	        searchButton.setText(startSearchTextButton);
 	        searchButton.addSelectionListener(new SelectionAdapter() {
 	        	@Override
-	        	public void widgetSelected(SelectionEvent e) { // РїСЂРё РЅР°Р¶Р°С‚РёРё РЅР° РєРЅРѕРїРєСѓ
-		        	if(searchButton.getText().equals(startSearchTextButton)) { // РµСЃР»Рё РјС‹ РЅРµ РІ РїСЂРѕС†РµСЃСЃРµ РїРѕРёСЃРєР°
-		        		if(selectedPath == null) { // РµСЃР»Рё РїСѓС‚СЊ РЅРµ РІС‹Р±СЂР°РЅ
-		        			openFindPathWindow(shell); // РѕС‚РєСЂС‹РІР°РµРј РѕРєРЅРѕ РІС‹Р±РѕСЂР° РїСѓС‚Рё
-		        			if(selectedPath == null) { // РµСЃР»Рё РїСѓС‚СЊ РґРѕ СЃРёС… РїРѕСЂ РЅРµ РІС‹Р±СЂР°РЅ
-		        				showTooltip(label1, "РќРµРѕР±С…РѕРґРёРјРѕ РІС‹Р±СЂР°С‚СЊ РїСѓС‚СЊ!"); // РІС‹С…РѕРґРёРј Рё РІС‹РІРѕРґРёРј tooltip
+	        	public void widgetSelected(SelectionEvent e) { // при нажатии на кнопку
+		        	if(searchButton.getText().equals(startSearchTextButton)) { // если мы не в процессе поиска
+		        		if(selectedPath == null) { // если путь не выбран
+		        			openFindPathWindow(shell); // открываем окно выбора пути
+		        			if(selectedPath == null) { // если путь до сих пор не выбран
+		        				showTooltip(label1, "Необходимо выбрать путь!"); // выходим и выводим tooltip
 		        				return;
 		        			}
 		        		}
-		        		startFindFiles(inputText, inputExtension); // РЅР°С‡РёРЅР°РµРј РёСЃРєР°С‚СЊ С„Р°Р№Р»С‹
+		        		startFindFiles(inputText, inputExtension); // начинаем искать файлы
 	        		} 
 		        	else {
-		        		changeButton(false); // РјРµРЅСЏРµРј РЅР°РґРїРёСЃСЊ РЅР° РєРЅРѕРїРєСѓ
-		        		FindFiles.getInstance().stopSearch(); // Р·Р°РІРµСЂС€Р°РµРј РїРѕРёСЃРє
-		        		if(threadPool != null) // Р·Р°РІРµСЂС€Р°РµРј Р·Р°РїСѓС‰РµРЅРЅС‹Рµ РїРѕС‚РѕРєРё
+		        		changeButton(false); // меняем надпись на кнопку
+		        		FindFiles.getInstance().stopSearch(); // завершаем поиск
+		        		if(threadPool != null) // завершаем запущенные потоки
 		        			threadPool.shutdownNow();
-		        		updateStatusBar(); // РѕР±РЅРѕРІР»СЏРµРј СЃС‚Р°С‚СѓСЃР±Р°СЂ
+		        		updateStatusBar(); // обновляем статусбар
 		        	}	        		
 	        	}
 	        });	        
 	}
 	
-	/** Р¤СѓРЅРєС†РёСЏ РёР·РјРµРЅРµРЅРёСЏ РЅР°РґРїРёСЃРё РЅР° РєРЅРѕРїРєРµ */
+	/** Функция изменения надписи на кнопке */
 	private void changeButton(boolean searchStarted) {
 		if(searchButton != null && !searchButton.isDisposed()) {
 			if(searchStarted) 
 				searchButton.setText(stopSearchTextButton);
 			else 
 				searchButton.setText(startSearchTextButton);
-			searchButton.pack(); // РёР·РјРµРЅСЏРµРј СЂР°Р·РјРµСЂ РєРЅРѕРїРєРё РїРѕРґ РЅРѕРІС‹Р№ С‚РµРєСЃС‚
+			searchButton.pack(); // изменяем размер кнопки под новый текст
 		}
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ СЃРѕР·РґР°РЅРёСЏ СЃС‚Р°С‚СѓСЃР±Р°СЂР°
+	 * Функция создания статусбара
 	 */
 	private void createStatusBar(Shell shell) {
 		toolBarText = new Label(shell, SWT.NONE);
@@ -149,46 +149,46 @@ public class MainWindow {
 	}
 
 	/**
-	 * Р¤СѓРєРЅС†РёСЏ РѕС‚РєСЂС‹С‚РёСЏ С„Р°Р№Р»Р° РІ РЅРѕРІРѕР№ РІРєР»Р°РґРєРµ
+	 * Фукнция открытия файла в новой вкладке
 	 * @param pathToFile
 	 */
 	private void openFileInNewTab(String pathToFile) {
-		for(int i = 0; i < tabFolder.getItemCount(); i++) // РµСЃР»Рё С‚Р°РєРѕР№ С„Р°Р№Р» СѓР¶Рµ РѕС‚РєСЂС‹С‚, С‚Рѕ РІС‚РѕСЂРѕР№ СЂР°Р· РЅРµ РѕС‚РєСЂРѕРµРј
+		for(int i = 0; i < tabFolder.getItemCount(); i++) // если такой файл уже открыт, то второй раз не откроем
 			if(tabFolder.getItem(i).getData("Path").toString().equals(pathToFile))
 				return;
-		CTabItem newTab = new CTabItem(tabFolder, SWT.CLOSE); // СЃРѕР·РґР°С‘Рј РЅРѕРІСѓСЋ РІРєР»Р°РґРєСѓ
+		CTabItem newTab = new CTabItem(tabFolder, SWT.CLOSE); // создаём новую вкладку
 		
 		Composite compositePage = new Composite(tabFolder, SWT.NONE);
 		compositePage.setLayout(new GridLayout());
 		
-		Text textBrowser = new Text(compositePage, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL ); // СЃРѕР·РґР°С‘Рј РјРµСЃС‚Рѕ РґР»СЏ С‚РµРєСЃС‚Р° РІ РЅРѕРІРѕР№ РІРєР»Р°РґРєРµ
-		textBrowser.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true)); // СЂР°СЃС‚СЏРіРёРІР°РµРј РµРіРѕ
+		Text textBrowser = new Text(compositePage, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL ); // создаём место для текста в новой вкладке
+		textBrowser.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true)); // растягиваем его
 		
-		newTab.setData("Path", pathToFile); // Р·Р°РїРѕРјРёРЅР°РµРј РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ
-		newTab.setText(pathToFile.substring(pathToFile.lastIndexOf("\\") + 1, pathToFile.length())); // РІС‹РІРѕРґРёРј РЅР°Р·РІР°РЅРёРµ
+		newTab.setData("Path", pathToFile); // запоминаем путь к файлу
+		newTab.setText(pathToFile.substring(pathToFile.lastIndexOf("\\") + 1, pathToFile.length())); // выводим название
 		newTab.addDisposeListener(new DisposeListener() { 
 			@Override
-			public void widgetDisposed(DisposeEvent e) { // РµСЃР»Рё РІРёРґР¶РµС‚ СѓРЅРёС‡С‚РѕР¶РµРЅ
-				textBrowser.setText(""); // СѓРґР°Р»СЏРµРј С‚РµРєСЃС‚
-				textBrowser.dispose(); // СѓРґР°Р»СЏРµРј РјРµСЃС‚Рѕ РґР»СЏ С‚РµРєСЃС‚Р°
-				Thread fileOpener = ((Thread) newTab.getData("RunningThread")); // РїРѕР»СѓС‡Р°РµРј РїРѕС‚РѕРє РІС‹РІРѕРґР° С„Р°Р№Р»Р°
-				if(fileOpener != null && !fileOpener.isInterrupted()) // РµСЃР»Рё РѕРЅ СЂР°Р±РѕС‚Р°РµС‚
-					((Thread) newTab.getData("RunningThread")).interrupt(); // РїСЂРµРєСЂР°С‰Р°РµРј РµРіРѕ СЂР°Р±РѕС‚Сѓ
+			public void widgetDisposed(DisposeEvent e) { // если виджет уничтожен
+				textBrowser.setText(""); // удаляем текст
+				textBrowser.dispose(); // удаляем место для текста
+				Thread fileOpener = ((Thread) newTab.getData("RunningThread")); // получаем поток вывода файла
+				if(fileOpener != null && !fileOpener.isInterrupted()) // если он работает
+					((Thread) newTab.getData("RunningThread")).interrupt(); // прекращаем его работу
 			}
 		});
-		tabFolder.setSelection(newTab); // РѕС‚РєСЂС‹РІР°РµРј РЅРѕРІСѓСЋ РІРєР»Р°РґРєСѓ
+		tabFolder.setSelection(newTab); // открываем новую вкладку
 		
 		textBrowser.addKeyListener(new KeyListener() {
 			@Override
-			public void keyPressed(KeyEvent e) { // РѕР¶РёРґР°РµРј РЅР°Р¶Р°С‚РёСЏ РєР»Р°РІРёС€
-				if(e.character == 0x01)  // СЃРѕС‡РµС‚Р°РЅРёРµ Ctrl+A
-					textBrowser.selectAll(); // РІС‹Р±РёСЂР°РµРј РІРµСЃСЊ С‚РµРєСЃС‚
+			public void keyPressed(KeyEvent e) { // ожидаем нажатия клавиш
+				if(e.character == 0x01)  // сочетание Ctrl+A
+					textBrowser.selectAll(); // выбираем весь текст
 				else
-				if(e.keyCode == SWT.HOME) // РєРЅРѕРїРєР° Home
-					textBrowser.setSelection(0); // РїРµСЂРµС…РѕРґРёРј РІ РЅР°С‡Р°Р»Рѕ
+				if(e.keyCode == SWT.HOME) // кнопка Home
+					textBrowser.setSelection(0); // переходим в начало
 				else
-				if(e.keyCode == SWT.END) // РєРЅРѕРїРєР° End
-					textBrowser.setSelection(textBrowser.getCharCount()); // РїРµСЂРµС…РѕРґРёРј РІ РєРѕРЅРµС†
+				if(e.keyCode == SWT.END) // кнопка End
+					textBrowser.setSelection(textBrowser.getCharCount()); // переходим в конец
 			}
 			@Override
 			public void keyReleased(KeyEvent e) {}
@@ -197,10 +197,10 @@ public class MainWindow {
 		if((int)((new File(pathToFile).length()) / maxCapacity) > 1) 
 			createPagesButtons(compositePage, textBrowser);
 		newTab.setControl(compositePage);
-		readFromFileToTextBrowser(textBrowser, pathToFile, newTab); // РІС‹РІРѕРґРёРј С„Р°Р№Р»
+		readFromFileToTextBrowser(textBrowser, pathToFile, newTab); // выводим файл
 	}
 	
-	/** Р¤СѓРЅРєС†РёСЏ СЃРѕР·РґР°РЅРёСЏ РєРЅРѕРїРѕРє РїРµСЂРµР»РёСЃС‚С‹РІР°РЅРёСЏ СЃС‚СЂР°РЅРёС† РїРѕРґ С‚РµРєСЃС‚РѕРј */
+	/** Функция создания кнопок перелистывания страниц под текстом */
 	private void createPagesButtons(Composite parent, Text textBrowser) {
         Composite buttonsComposite = new Composite(parent, SWT.NONE);
         buttonsComposite.setLayout(new GridLayout(3, false));
@@ -208,33 +208,33 @@ public class MainWindow {
         buttonsComposite.setLayoutData(gridData);
 
         
-        Label buttonBack = new Label(buttonsComposite, SWT.NONE); // РєРЅРѕРїРєР° "РЅР°Р·Р°Рґ"
-        Label buttonForward = new Label(buttonsComposite, SWT.NONE); // РєРЅРѕРїРєР° "РІРїРµСЂС‘Рґ"
-        buttonsStatusText = new Label(buttonsComposite, SWT.NONE); // label РІС‹РІРѕРґР° СЃС‚СЂР°РЅРёС†
-        buttonsStatusText.setText("РЎС‚СЂР°РЅРёС†Р°:");
+        Label buttonBack = new Label(buttonsComposite, SWT.NONE); // кнопка "назад"
+        Label buttonForward = new Label(buttonsComposite, SWT.NONE); // кнопка "вперёд"
+        buttonsStatusText = new Label(buttonsComposite, SWT.NONE); // label вывода страниц
+        buttonsStatusText.setText("Страница:");
         
         buttonBack.setImage(new Image(Display.getDefault(), ".\\img\\back.png"));
-        buttonBack.setVisible(false); // СЃРєСЂС‹РІР°РµРј РєРЅРѕРїРєСѓ РЅР°Р·Р°Рґ (РјС‹ Р¶Рµ С‚РѕС‡РЅРѕ Р±СѓРґРµРј РЅР° 1 СЃС‚СЂР°РЅРёС†Рµ)
-        buttonBack.setToolTipText("РџРµСЂРµР№С‚Рё РЅР° РїСЂРµРґС‹РґСѓС‰СѓСЋ СЃС‚СЂР°РЅРёС†Сѓ");
+        buttonBack.setVisible(false); // скрываем кнопку назад (мы же точно будем на 1 странице)
+        buttonBack.setToolTipText("Перейти на предыдущую страницу");
         buttonBack.addMouseListener(new MouseAdapter() {
         	@Override
-        	public void mouseDown(MouseEvent e) { // РїСЂРё РЅР°Р¶Р°С‚РёРё РЅР° РєРЅРѕРїРєСѓ "РЅР° СЃС‚СЂР°РЅРёС†Сѓ РЅР°Р·Р°Рґ"
+        	public void mouseDown(MouseEvent e) { // при нажатии на кнопку "на страницу назад"
         		CTabItem selectedTab = tabFolder.getSelection(); 
         		if(selectedTab != null)
-        			// РїРµСЂРµС…РѕРґРёРј РЅР°Р·Р°Рґ РЅР° РѕРґРЅСѓ СЃС‚СЂР°РЅРёС†Сѓ
+        			// переходим назад на одну страницу
         			openPage(textBrowser, (String)selectedTab.getData("Path"), selectedTab, false, 
         					new Label[] {buttonBack, buttonForward});
         	}
         });        
         
         buttonForward.setImage(new Image(Display.getDefault(), ".\\img\\forward.png"));
-        buttonForward.setToolTipText("РџРµСЂРµР№С‚Рё РЅР° СЃР»РµРґСѓСЋС‰СѓСЋ СЃС‚СЂР°РЅРёС†Сѓ");
+        buttonForward.setToolTipText("Перейти на следующую страницу");
         buttonForward.addMouseListener(new MouseAdapter() {
         	@Override
-        	public void mouseDown(MouseEvent e) { // РїСЂРё РЅР°Р¶Р°С‚РёРё РЅР° РєРЅРѕРїРєСѓ "РЅР° СЃС‚СЂР°РЅРёС†Сѓ РІРїРµСЂС‘Рґ"
+        	public void mouseDown(MouseEvent e) { // при нажатии на кнопку "на страницу вперёд"
         		CTabItem selectedTab = tabFolder.getSelection();
         		if(selectedTab != null)
-        			// РїРµСЂРµС…РѕРґРёРј РІРїРµСЂС‘Рґ РЅР° РѕРґРЅСѓ СЃС‚СЂР°РЅС†Сѓ
+        			// переходим вперёд на одну странцу
         			openPage(textBrowser, (String)selectedTab.getData("Path"), selectedTab, true, 
         					new Label[] {buttonBack, buttonForward});
         	}
@@ -242,72 +242,72 @@ public class MainWindow {
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ С‡С‚РµРЅРёСЏ РёР· С„Р°Р№Р»Р° РІ РјРµСЃС‚Рѕ РґР»СЏ С‚РµРєСЃС‚Р°
-	 * @param textBrowser РјРµСЃС‚Рѕ РґР»СЏ С‚РµРєСЃС‚Р°
-	 * @param pathToFile РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ
-	 * @param newTab РІРєР»Р°РґРєР°, РІ РєРѕС‚РѕСЂСѓСЋ РІС‹РІРѕРґРёС‚СЃСЏ С‚РµРєСЃС‚
-	 * @param buttonsComposite Р·РґРµСЃСЊ РЅР°С…РѕРґСЏС‚СЃСЏ РєРЅРѕРїРєРё
+	 * Функция чтения из файла в место для текста
+	 * @param textBrowser место для текста
+	 * @param pathToFile путь к файлу
+	 * @param newTab вкладка, в которую выводится текст
+	 * @param buttonsComposite здесь находятся кнопки
 	 */
 	private void readFromFileToTextBrowser(Text textBrowser, String pathToFile, CTabItem newTab) {
 		final String runningThread = "RunningThread",
 					totalPages = "TotalPages",
 					namePage = "Page";
 		
-		Thread curThread = ((Thread) newTab.getData(runningThread)); // РµСЃР»Рё РїРѕС‚РѕРє Р·Р°РїСѓС‰РµРЅ
-		if(curThread != null && !curThread.isInterrupted()) // РїСЂРµСЂС‹РІР°РµРј РµРіРѕ СЂР°Р±РѕС‚Сѓ
+		Thread curThread = ((Thread) newTab.getData(runningThread)); // если поток запущен
+		if(curThread != null && !curThread.isInterrupted()) // прерываем его работу
 			curThread.interrupt();
 		
-		if(newTab.getData(namePage) == null) // РµСЃР»Рё РјС‹ РµС‰С‘ РЅРµ СѓРєР°Р·С‹РІР°Р»Рё РЅРѕРјРµСЂ СЃС‚СЂР°РЅРёС†С‹
-			newTab.setData(namePage, 1); // СѓРєР°Р·С‹РІР°РµРј РЅРѕРјРµСЂ СЃС‚СЂР°РЅРёС†С‹
+		if(newTab.getData(namePage) == null) // если мы ещё не указывали номер страницы
+			newTab.setData(namePage, 1); // указываем номер страницы
 		int page = (int)newTab.getData(namePage); 
 		
-		if(newTab.getData(totalPages) == null) // РµСЃР»Рё РµС‰С‘ РЅРµ СѓРєР°Р·С‹РІР°Р»Рё, СЃРєРѕР»СЊРєРѕ СЃС‚СЂР°РЅРёС† РІ С„Р°Р№Р»Рµ
-			newTab.setData(totalPages, (int)((new File(pathToFile).length()) / maxCapacity)); // СѓРєР°Р·С‹РІР°РµРј РєРѕР»РёС‡РµСЃС‚РІРѕ СЃС‚СЂР°РЅРёС† РІ С„Р°Р№Р»Рµ
-		if((int)newTab.getData(totalPages) > 1) { // РµСЃР»Рё Р±РѕР»СЊС€Рµ РѕРґРЅРѕР№ СЃС‚СЂР°РЅРёС†С‹
-			// РІС‹РІРѕРґРёРј, РЅР° РєР°РєРѕР№ РјС‹ СЃРµР№С‡Р°СЃ СЃС‚СЂР°РЅРёС†Рµ Рё СЃРєРѕР»СЊРєРѕ РёС… РІСЃРµРіРѕ
-			buttonsStatusText.setText("РЎС‚СЂР°РЅРёС†Р° " + (int)newTab.getData("Page") + "/" + (int)newTab.getData(totalPages));
-			buttonsStatusText.pack(); // РёР·РјРµРЅСЏРµРј СЂР°Р·РјРµСЂ СЃС‚Р°С‚СѓСЃРЅРѕР№ СЃС‚СЂРѕРєРё
+		if(newTab.getData(totalPages) == null) // если ещё не указывали, сколько страниц в файле
+			newTab.setData(totalPages, (int)((new File(pathToFile).length()) / maxCapacity)); // указываем количество страниц в файле
+		if((int)newTab.getData(totalPages) > 1) { // если больше одной страницы
+			// выводим, на какой мы сейчас странице и сколько их всего
+			buttonsStatusText.setText("Страница " + (int)newTab.getData("Page") + "/" + (int)newTab.getData(totalPages));
+			buttonsStatusText.pack(); // изменяем размер статусной строки
 		}
 
-		newTab.setData(runningThread,new Thread(() -> { // Р·Р°РїСѓСЃРєР°РµРј РЅРѕРІС‹Р№ РїРѕС‚РѕРє Рё Р·Р°РїРѕРјРёРЅР°РµРј РµРіРѕ
-			byte[] bts = new byte[maxElems]; // РјР°СЃСЃРёРІ Р±Р°Р№С‚, СЃС‡РёС‚Р°РЅРЅС‹С… РёР· С„Р°Р№Р»Р°
-			try(RandomAccessFile f = new RandomAccessFile(pathToFile, "r")){ // РЅР°С‡РёРЅР°РµРј С‡РёС‚Р°С‚СЊ РёР· С„Р°Р№Р»Р°
+		newTab.setData(runningThread,new Thread(() -> { // запускаем новый поток и запоминаем его
+			byte[] bts = new byte[maxElems]; // массив байт, считанных из файла
+			try(RandomAccessFile f = new RandomAccessFile(pathToFile, "r")){ // начинаем читать из файла
 				int i = 0;
-				if(page >= 1) // РµСЃР»Рё РјС‹ РЅРµ РЅР° РїРµСЂРІРѕР№ СЃС‚СЂР°РЅРёС†Рµ
-					f.skipBytes((page - 1) * maxCapacity); // СЃРјРµС‰Р°РµРјСЃСЏ РїРѕ С„Р°Р№Р»Сѓ
-				Display.getDefault().syncExec(() -> { textBrowser.setText("");}); // РѕС‡РёС‰Р°РµРј РјРµСЃС‚Рѕ РґР»СЏ С‚РµРєСЃС‚Р°
-				// РїРѕРєР° РїРѕС‚РѕРє РЅРµ Р·Р°РІРµСЂС€С‘РЅ Рё РјРѕР¶РЅРѕ С‡РёС‚Р°С‚СЊ РёР· С„Р°Р№Р»Р° Рё РјС‹ РЅРµ РїСЂРµРІС‹СЃРёР»Рё РјР°РєСЃРёРјР°Р»СЊРЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ Р±Р°Р№С‚
+				if(page >= 1) // если мы не на первой странице
+					f.skipBytes((page - 1) * maxCapacity); // смещаемся по файлу
+				Display.getDefault().syncExec(() -> { textBrowser.setText("");}); // очищаем место для текста
+				// пока поток не завершён и можно читать из файла и мы не превысили максимальное количество байт
 				while(!Thread.currentThread().isInterrupted() && f.read(bts, 0, maxElems) != -1 && i * maxElems < maxCapacity) {
-					i++; // СЃРєРѕР»СЊРєРѕ СЂР°Р· СЃС‡РёС‚Р°Р»Рё РёР· С„Р°Р№Р»Р°
-					appendStr(textBrowser, bts); // РґРѕР±Р°РІР»СЏРµРј СЃС‚СЂРѕРєСѓ Рє С‚РµРєСЃС‚Сѓ 
-					Arrays.fill(bts, (byte)0); // Р·Р°РїРѕР»РЅСЏРµРј РјР°СЃСЃРёРІ РЅСѓР»СЏРјРё
+					i++; // сколько раз считали из файла
+					appendStr(textBrowser, bts); // добавляем строку к тексту 
+					Arrays.fill(bts, (byte)0); // заполняем массив нулями
 				}			
 				bts = null;
 			}
 			catch(IOException e){ }
 		}));
-		((Thread) newTab.getData(runningThread)).start(); // Р·Р°РїСѓСЃРєР°РµРј РїРѕС‚РѕРє
+		((Thread) newTab.getData(runningThread)).start(); // запускаем поток
 	}
 
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ РґРѕР±Р°РІР»РµРЅРёСЏ СЃС‚СЂРѕРєРё Рє С‚РµРєСЃС‚Сѓ
-	 * @param textBrowser РљСѓРґР° РІС‹РІРѕРґРёРј С‚РµРєСЃС‚
-	 * @param byteStr Р—РґРµСЃСЊ С…СЂР°РЅРёС‚СЃСЏ СЃС‚СЂРѕРєР°
+	 * Функция добавления строки к тексту
+	 * @param textBrowser Куда выводим текст
+	 * @param byteStr Здесь хранится строка
 	 */
 	private void appendStr(Text textBrowser, byte[] byteStr) {
 		Display.getDefault().syncExec(() -> {
-			if(textBrowser != null && !textBrowser.isDisposed()) { // РµСЃР»Рё РµСЃС‚СЊ, РєСѓРґР° РІС‹РІРѕРґРёС‚СЊ
-				textBrowser.setVisible(false); // СЃРєСЂС‹РІР°РµРј РІРёРґР¶РµС‚ РґР»СЏ С‚РѕРіРѕ, С‡С‚РѕР±С‹ РєСѓСЂСЃРѕСЂ РЅРµ РїРµСЂРµРЅРѕСЃРёР»СЃСЏ Рє РґРѕР±Р°РІР»РµРЅРЅРѕРјСѓ С‚РµРєСЃС‚Сѓ
-				textBrowser.append(new String(byteStr)); // РґРѕР±Р°РІР»СЏРµРј РЅРѕРІСѓСЋ СЃС‚СЂРѕРєСѓ
-				textBrowser.setVisible(true); // РґРµР»Р°РµРј РІРёРґР¶РµС‚ РІРёРґРёРјС‹Рј
+			if(textBrowser != null && !textBrowser.isDisposed()) { // если есть, куда выводить
+				textBrowser.setVisible(false); // скрываем виджет для того, чтобы курсор не переносился к добавленному тексту
+				textBrowser.append(new String(byteStr)); // добавляем новую строку
+				textBrowser.setVisible(true); // делаем виджет видимым
 			}
 		});
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ РІС‹РІРѕРґР° С‚СѓР»С‚РёРїР°
-	 * @param control РљСѓРґР° Р±СѓРґРµС‚ РІС‹РІРµРґРµРЅ С‚СѓР»С‚РёРї
-	 * @param message РЎРѕРѕР±С‰РµРЅРёРµ
+	 * Функция вывода тултипа
+	 * @param control Куда будет выведен тултип
+	 * @param message Сообщение
 	 */
 	private static void showTooltip(Control control, String message) {
 		ToolTip inform = new ToolTip(control.getShell(), SWT.BALLOON | SWT.ICON_ERROR);
@@ -318,17 +318,17 @@ public class MainWindow {
 		inform.setVisible(true);
 	}
 		
-	/** Р¤СѓРЅРєС†РёСЏ СЃРѕР·РґР°РЅРёСЏ РґРµСЂРµРІР° С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹ Рё С…СЂР°РЅРёР»РёС‰Р° РІРєР»Р°РґРѕРє  */
+	/** Функция создания дерева файловой системы и хранилища вкладок  */
 	private void createBody(Shell shell) {
-		SashForm body = new SashForm(shell, SWT.HORIZONTAL); // РёСЃРїРѕР»СЊР·СѓРµРј SashForm РґР»СЏ С‚РѕРіРѕ, С‡С‚РѕР±С‹ РёРјРµС‚СЊ РІРѕР·РјРѕР¶РЅРѕСЃС‚СЊ 
-															// РёР·РјРµРЅСЏС‚СЊ СЂР°Р·РјРµСЂС‹ РІРёРґР¶РµС‚Р°
+		SashForm body = new SashForm(shell, SWT.HORIZONTAL); // используем SashForm для того, чтобы иметь возможность 
+															// изменять размеры виджета
 		body.setLayoutData(new GridData(GridData.FILL_BOTH));
-        createFileSystemTree (body); // СЃРѕР·РґР°С‘Рј РґРµСЂРµРІРѕ С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹
-        createTabFolder(shell, body); // СЃРѕР·РґР°С‘Рј С…СЂР°РЅРёР»РёС‰Рµ РІРєР»Р°РґРѕРє
+        createFileSystemTree (body); // создаём дерево файловой системы
+        createTabFolder(shell, body); // создаём хранилище вкладок
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ СЃРѕР·РґР°РЅРёСЏ РґРµСЂРµРІР° С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹
+	 * Функция создания дерева файловой системы
 	 * @param parent
 	 */
 	private void createFileSystemTree(Composite parent) {
@@ -336,21 +336,21 @@ public class MainWindow {
         treeComposite.setLayout(new GridLayout());
         treeComposite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         
-        new Label(treeComposite, SWT.NONE).setText("РќР°Р№РґРµРЅРЅС‹Рµ С„Р°Р№Р»С‹");
+        new Label(treeComposite, SWT.NONE).setText("Найденные файлы");
 
-        fileSystemTree = new Tree(treeComposite, SWT.BORDER); // СЃРѕР·РґР°С‘Рј РґРµСЂРµРІРѕ
+        fileSystemTree = new Tree(treeComposite, SWT.BORDER); // создаём дерево
         fileSystemTree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         fileSystemTree.addMouseListener(new MouseListener() {
 			@Override
-			public void mouseUp(MouseEvent e) { // РµСЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅР°Р¶Р°Р» РЅР° РєРЅРѕРїРєСѓ РјС‹С€Рё
-				if(fileSystemTree.getItem(new Point(e.x, e.y)) == null) // РµСЃР»Рё РЅРёРєСѓРґР° РЅРµ РїРѕРїР°Р»Рё РјС‹С€РєРѕР№
-					fileSystemTree.deselectAll(); // СЃРЅРёРјР°РµРј РІС‹РґРµР»РµРЅРёРµ 
+			public void mouseUp(MouseEvent e) { // если пользователь нажал на кнопку мыши
+				if(fileSystemTree.getItem(new Point(e.x, e.y)) == null) // если никуда не попали мышкой
+					fileSystemTree.deselectAll(); // снимаем выделение 
 			}
 
 			@Override
-			public void mouseDoubleClick(MouseEvent e) { // РѕС‚СЃР»РµР¶РёРІР°РЅРёРµ РґРІРѕР№РЅРѕРіРѕ РєР»РёРєР°
-				TreeItem selectedItem = fileSystemTree.getItem(new Point(e.x, e.y)); // РїРѕР»СѓС‡Р°РµРј Item РїРѕ РєРѕРѕСЂРґРёРЅР°С‚Р°Рј РјС‹С€Рё
-				// РµСЃР»Рё РїРѕРїР°Р»Рё РїРѕ Item Рё СЌС‚Рѕ С„Р°Р№Р», С‚Рѕ РѕС‚РєСЂС‹РІР°РµРј РµРіРѕ РІ РЅРѕРІРѕР№ РІРєР»Р°РґРєРµ
+			public void mouseDoubleClick(MouseEvent e) { // отслеживание двойного клика
+				TreeItem selectedItem = fileSystemTree.getItem(new Point(e.x, e.y)); // получаем Item по координатам мыши
+				// если попали по Item и это файл, то открываем его в новой вкладке
 				if(selectedItem != null && selectedItem.getText().charAt(selectedItem.getText().length() - 1) != '\\')
 					openFileInNewTab((String)selectedItem.getData());
 			}
@@ -358,58 +358,58 @@ public class MainWindow {
 			@Override
 			public void mouseDown(MouseEvent e) { }
 		});
-        // СЃРѕР·РґР°С‘Рј РІС‹РїР°РґР°СЋС‰РµРµ РјРµРЅСЋ РґР»СЏ РґРµСЂРµРІР°, РІС‹Р·С‹РІР°РµРјРѕРµ РїРѕ РЅР°Р¶Р°С‚РёСЋ РїСЂР°РІРѕР№ РєРЅРѕРїРєРё РјС‹С€Рё
+        // создаём выпадающее меню для дерева, вызываемое по нажатию правой кнопки мыши
         createFileSystemTreeMenu();
     }	
 	
-	/** Р¤СѓРєРЅС†РёСЏ СЃРѕР·РґР°РЅРёСЏ РІС‹РїР°РґР°СЋС‰РµРіРѕ РјРµРЅСЋ РґР»СЏ РґРµСЂРµРІР° С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹ */
+	/** Фукнция создания выпадающего меню для дерева файловой системы */
 	private void createFileSystemTreeMenu() {
-		Menu treeMenu = new Menu(fileSystemTree); // СЃРѕР·РґР°С‘Рј РјРµРЅСЋ
-		fileSystemTree.setMenu(treeMenu);	// РїСЂРёРІСЏР·С‹РІР°РµРј РµРіРѕ
+		Menu treeMenu = new Menu(fileSystemTree); // создаём меню
+		fileSystemTree.setMenu(treeMenu);	// привязываем его
 		treeMenu.addMenuListener(new MenuAdapter() {
 			@Override
-			public void menuShown(MenuEvent e) { // РїСЂРё РїРѕРєР°Р·Рµ РјРµРЅСЋ
+			public void menuShown(MenuEvent e) { // при показе меню
 				MenuItem[] items = treeMenu.getItems();
-				for(int i = 0; i < items.length; i++) // СѓРЅРёС‡С‚РѕР¶Р°РµРј СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ СЌР»РµРјРµРЅС‚С‹ РјРµРЅСЋ
+				for(int i = 0; i < items.length; i++) // уничтожаем существующие элементы меню
 					items[i].dispose();
 				
-				TreeItem[] selectedTreeItems = fileSystemTree.getSelection(); // РїРѕР»СѓС‡Р°РµРј РІС‹РґРµР»РµРЅРЅС‹Р№ СЌР»РµРјРµРЅС‚ РґРµСЂРµРІР°
+				TreeItem[] selectedTreeItems = fileSystemTree.getSelection(); // получаем выделенный элемент дерева
 				
-				// РµСЃР»Рё РѕРЅ РЅРµ РІС‹РґРµР»РµРЅ, РёР»Рё РІС‹РґРµР»РµРЅРѕ РЅРµСЃРєРѕР»СЊРєРѕ - РІС‹С…РѕРґРёРј
+				// если он не выделен, или выделено несколько - выходим
 				if(selectedTreeItems.length == 0 || selectedTreeItems.length > 1) 
 					return;
 				
-				// РµСЃР»Рё Сѓ РІС‹РґРµР»РµРЅРЅРѕРіРѕ СЌР»РµРјРµРЅС‚Р° РµСЃС‚СЊ РґРѕС‡РµСЂРЅРёРµ
+				// если у выделенного элемента есть дочерние
 				if(selectedTreeItems[0].getItemCount() > 0) {
-					// СЃРѕР·РґР°С‘Рј РїСѓРЅРєС‚ РјРµРЅСЋ РґР»СЏ РїРѕР»РЅРѕРіРѕ СЂР°СЃРєСЂС‹С‚РёСЏ РґРµСЂРµРІР°
+					// создаём пункт меню для полного раскрытия дерева
 					MenuItem newItemExpand = new MenuItem(treeMenu, SWT.NONE); 
-					newItemExpand.setText("Р Р°Р·РІРµСЂРЅСѓС‚СЊ");
+					newItemExpand.setText("Развернуть");
 					newItemExpand.addSelectionListener(new SelectionAdapter() {
 						@Override
-						public void widgetSelected(SelectionEvent e) { // РїСЂРё РЅР°Р¶Р°С‚РёРё РЅР° СЌС‚РѕС‚ РїСѓРЅРєС‚
-							expandOrCollapseFileSystemTree(fileSystemTree.getSelection()[0], true); // СЂР°СЃРєСЂС‹РІР°РµРј РґРµСЂРµРІРѕ
+						public void widgetSelected(SelectionEvent e) { // при нажатии на этот пункт
+							expandOrCollapseFileSystemTree(fileSystemTree.getSelection()[0], true); // раскрываем дерево
 						}
 					});
 					
-					// СЃРѕР·РґР°С‘Рј РїСѓРЅРєС‚ РјРµРЅСЋ РґР»СЏ РїРѕР»РЅРѕРіРѕ СЃРІРѕСЂР°С‡РёРІР°РЅРёСЏ РґРµСЂРµРІР° РґРѕ С‚РµРєСѓС‰РµРіРѕ СЌР»РµРјРµРЅС‚Р°
+					// создаём пункт меню для полного сворачивания дерева до текущего элемента
 					MenuItem newItemCollapse = new MenuItem(treeMenu, SWT.NONE);
-					newItemCollapse.setText("РЎРІРµСЂРЅСѓС‚СЊ");
+					newItemCollapse.setText("Свернуть");
 					newItemCollapse.addSelectionListener(new SelectionAdapter() {
 						@Override
-						public void widgetSelected(SelectionEvent e) { // РїСЂРё РЅР°Р¶Р°С‚РёРё
-							expandOrCollapseFileSystemTree(fileSystemTree.getSelection()[0], false); // СЃРІРѕСЂР°С‡РёРІР°РµРј РґРµСЂРµРІРѕ
+						public void widgetSelected(SelectionEvent e) { // при нажатии
+							expandOrCollapseFileSystemTree(fileSystemTree.getSelection()[0], false); // сворачиваем дерево
 						}
 					});
 				}
 				
-				if(selectedTreeItems[0].getItemCount() == 0) { // РµСЃР»Рё Сѓ СЌР»РµРјРµРЅС‚Р° РЅРµС‚ РґРѕС‡РµСЂРЅРёС…
-					// СЃРѕР·РґР°С‘Рј РїСѓРЅРєС‚ РјРµРЅСЋ РґР»СЏ РѕС‚РєСЂС‹С‚РёСЏ С„Р°Р№Р»Р°
+				if(selectedTreeItems[0].getItemCount() == 0) { // если у элемента нет дочерних
+					// создаём пункт меню для открытия файла
 					MenuItem newItemOpenFile = new MenuItem(treeMenu, SWT.NONE);
-					newItemOpenFile.setText("РћС‚РєСЂС‹С‚СЊ С„Р°Р№Р»");
+					newItemOpenFile.setText("Открыть файл");
 					newItemOpenFile.addSelectionListener(new SelectionAdapter() {
 						@Override
 						public void widgetSelected(SelectionEvent e) {
-							openFileInNewTab((String)selectedTreeItems[0].getData()); // РѕС‚РєСЂС‹РІР°РµРј С„Р°Р№Р», РїРµСЂРµРґР°РІР°СЏ РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ
+							openFileInNewTab((String)selectedTreeItems[0].getData()); // открываем файл, передавая путь к файлу
 						}
 					});
 				}
@@ -418,19 +418,19 @@ public class MainWindow {
 	}
 	
 	/**
-	 * Р РµРєСѓСЂСЃРёРІРЅР°СЏ С„СѓРЅРєС†РёСЏ СЂР°СЃРєСЂС‹С‚РёСЏ РёР»Рё СЃРІРѕСЂР°С‡РёРІР°РЅРёСЏ РґРµСЂРµРІР°
-	 * @param expand Р Р°СЃРєСЂС‹С‚СЊ РґРµСЂРµРІРѕ - true; РЎРІРµСЂРЅСѓС‚СЊ РґРµСЂРµРІРѕ - false
+	 * Рекурсивная функция раскрытия или сворачивания дерева
+	 * @param expand Раскрыть дерево - true; Свернуть дерево - false
 	 */
 	private void expandOrCollapseFileSystemTree(TreeItem item, boolean expand) {		
-		item.setExpanded(expand); // СЂР°СЃРєСЂС‹РІР°РµРј РёР»Рё СЃРІРѕСЂР°С‡РёРІР°РµРј РІС‹Р±СЂР°РЅРЅС‹Р№ СЌР»РµРјРµРЅС‚
+		item.setExpanded(expand); // раскрываем или сворачиваем выбранный элемент
 		
-		TreeItem[] childItems = item.getItems(); // РїРѕР»СѓС‡Р°РµРј РІСЃРµС… РїРѕС‚РѕРјРєРѕРІ
-		for(TreeItem childItem : childItems) // РєР°Р¶РґРѕРіРѕ РёР· РЅРёС… СЂР°СЃРєСЂС‹РІР°РµРј РёР»Рё СЃРІРѕСЂР°С‡РёРІР°РµРј
+		TreeItem[] childItems = item.getItems(); // получаем всех потомков
+		for(TreeItem childItem : childItems) // каждого из них раскрываем или сворачиваем
 			expandOrCollapseFileSystemTree(childItem, expand);
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ СЃРѕР·РґР°РЅРёСЏ РїСЂРѕСЃС‚СЂР°РЅСЃС‚РІР° СЃ РІРєР»Р°РґРєР°РјРё
+	 * Функция создания пространства с вкладками
 	 * @param parent
 	 */
 	private void createTabFolder(Shell shell, Composite parent) {
@@ -440,90 +440,90 @@ public class MainWindow {
         
         createTop(shell, tabFolderComposite);
         
-        new Label(tabFolderComposite, SWT.NONE).setText("РќР°Р№РґРµРЅРЅС‹Рµ С„Р°Р№Р»С‹");
+        new Label(tabFolderComposite, SWT.NONE).setText("Найденные файлы");
         
         tabFolder = new CTabFolder(tabFolderComposite, SWT.BORDER);
         tabFolder.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
     }
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ РѕС‚РєСЂС‹С‚РёСЏ РЅРѕРІРѕР№ СЃС‚СЂР°РЅРёС†С‹ С„Р°Р№Р»Р°
-	 * @param textBrowser РњРµСЃС‚Рѕ РґР»СЏ С‚РµРєСЃС‚Р°
-	 * @param path РџСѓС‚СЊ Рє С„Р°Р№Р»Сѓ
-	 * @param tab Р’РєР»Р°РґРєР°, РІ РєРѕС‚РѕСЂСѓСЋ РІС‹РІРѕРґРёРј
-	 * @param next РЎР»РµРґСѓСЋС‰Р°СЏ СЃС‚СЂР°РЅС†Р° - true; РџСЂРµРґС‹РґСѓС‰Р°СЏ - false
+	 * Функция открытия новой страницы файла
+	 * @param textBrowser Место для текста
+	 * @param path Путь к файлу
+	 * @param tab Вкладка, в которую выводим
+	 * @param next Следующая странца - true; Предыдущая - false
 	 * @param buttons 
 	 */
 	private void openPage(Text textBrowser, String path, CTabItem tab, boolean next, Label[] buttons) {
-		int totalPages = (int)tab.getData("TotalPages"); // РїРѕР»СѓС‡Р°РµРј РїРѕР»РЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ СЃС‚СЂР°РЅРёС†
-		int curPage = (int)tab.getData("Page"); // РїРѕР»СѓС‡Р°РµРј С‚РµРєСѓС‰СѓСЋ СЃС‚СЂР°РЅРёС†Сѓ
-		buttonsStatusText.setText("РЎС‚СЂР°РЅРёС†Р° " + (int)tab.getData("Page") + "/" + totalPages); // РІС‹РІРѕРґРёРј РёС… РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
-		buttonsStatusText.pack(); // РёР·РјРµРЅСЏРµРј СЂР°Р·РјРµСЂ Label
-		if(next) { // РµСЃР»Рё РЅСѓР¶РЅРѕ РїРµСЂРµР»РёСЃС‚РЅСѓС‚СЊ СЃС‚СЂР°РЅРёС†Сѓ РІРїРµСЂС‘Рґ
-			if(curPage == totalPages) // РµСЃР»Рё РјС‹ РЅР° РїРѕСЃР»РµРґРЅРµР№ СЃС‚СЂР°РЅРёС†Рµ - РІС‹С…РѕРґРёРј
+		int totalPages = (int)tab.getData("TotalPages"); // получаем полное количество страниц
+		int curPage = (int)tab.getData("Page"); // получаем текущую страницу
+		buttonsStatusText.setText("Страница " + (int)tab.getData("Page") + "/" + totalPages); // выводим их пользователю
+		buttonsStatusText.pack(); // изменяем размер Label
+		if(next) { // если нужно перелистнуть страницу вперёд
+			if(curPage == totalPages) // если мы на последней странице - выходим
 				return;
-			buttons[0].setVisible(true); // РґРµР»Р°РµРј РІРёРґРёРјРѕР№ РєРЅРѕРїРєСѓ "РЅР°Р·Р°Рґ"
-			tab.setData("Page", curPage + 1); // СѓРІРµР»РёС‡РёРІР°РµРј С‚РµРєСѓС‰СѓСЋ СЃС‚СЂР°РЅРёС†Сѓ
-			if((curPage + 1) == totalPages) // РµСЃР»Рё РјС‹ РѕРєР°Р·Р°Р»РёСЃСЊ РЅР° РїРѕСЃР»РµРґРЅРµР№ СЃС‚СЂР°РЅРёС†Рµ
-				buttons[1].setVisible(false); // РїСЂСЏС‡РµРј РєРЅРѕРїРєСѓ "Р’РїРµСЂРµРґ"
+			buttons[0].setVisible(true); // делаем видимой кнопку "назад"
+			tab.setData("Page", curPage + 1); // увеличиваем текущую страницу
+			if((curPage + 1) == totalPages) // если мы оказались на последней странице
+				buttons[1].setVisible(false); // прячем кнопку "Вперед"
 			else
-				buttons[1].setVisible(true); // РёРЅР°С‡Рµ РїРѕРєР°Р·С‹РІР°РµРј
+				buttons[1].setVisible(true); // иначе показываем
 		} else {
-			if(curPage == 1) // РµСЃР»Рё РјС‹ РЅР° РїРµСЂРІРѕР№ СЃС‚СЂР°РЅРёС†Рµ - РІС‹С…РѕРґРёРј
+			if(curPage == 1) // если мы на первой странице - выходим
 				return;
-			tab.setData("Page", curPage - 1); // СѓРјРµРЅСЊС€Р°РµРј С‚РµРєСѓС‰СѓСЋ СЃС‚СЂР°РЅРёС†Сѓ
-			if((curPage - 1) == 1) // РµСЃР»Рё РјС‹ РѕРєР°Р·Р°Р»РёСЃСЊ РЅР° РїРµСЂРІРѕР№ СЃС‚СЂР°РЅРёС†Рµ
-				buttons[0].setVisible(false); // РїСЂСЏС‡РµРј РєРЅРѕРїРєСѓ "РЅР°Р·Р°Рґ"
+			tab.setData("Page", curPage - 1); // уменьшаем текущую страницу
+			if((curPage - 1) == 1) // если мы оказались на первой странице
+				buttons[0].setVisible(false); // прячем кнопку "назад"
 			else
-				buttons[0].setVisible(true); // РїРѕРєР°Р·С‹РІР°РµРј РєРЅРѕРїРєСѓ "РЅР°Р·Р°Рґ"
-			buttons[1].setVisible(true); // РїРѕРєР°Р·С‹РІР°РµРј РєРЅРѕРїРєСѓ "РІРїРµСЂС‘Рґ"
+				buttons[0].setVisible(true); // показываем кнопку "назад"
+			buttons[1].setVisible(true); // показываем кнопку "вперёд"
 		}
-		buttonsStatusText.setText("РЎС‚СЂР°РЅРёС†Р° " + (int)tab.getData("Page") + "/" + totalPages); // РІС‹РІРѕРґРёРј РєРѕР»РёС‡РµСЃС‚РІРѕ СЃС‚СЂР°РЅРёС† РїРѕР»Р·РѕРІР°С‚РµР»СЋ
-		buttonsStatusText.pack(); // РёР·РјРµРЅСЏРµРј СЂР°Р·РµСЂ label
-		readFromFileToTextBrowser(textBrowser, path, tab/*, buttons[0].getParent()*/); // РІС‹РІРѕРґРёРј РЅРѕРІСѓСЋ СЃС‚СЂР°РЅРёС†Сѓ РёР· С„Р°Р№Р»Р°
+		buttonsStatusText.setText("Страница " + (int)tab.getData("Page") + "/" + totalPages); // выводим количество страниц ползователю
+		buttonsStatusText.pack(); // изменяем разер label
+		readFromFileToTextBrowser(textBrowser, path, tab/*, buttons[0].getParent()*/); // выводим новую страницу из файла
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ, РѕС‚РєСЂС‹РІР°СЋС‰Р°СЏ РѕРєРЅРѕ РґР»СЏ РІС‹Р±РѕСЂР° РґРёСЂРµРєС‚РѕСЂРёРё Рё РїСЂРё СѓСЃРїРµС€РЅРѕРј 
-	 * РІС‹Р±РѕСЂРµ РІС‹РІРѕРґРёС‚ РЅР°Р·РІР°РЅРёРµ РґРёСЂРµРєС‚РѕСЂРёРё РІ РЅР°Р·РІР°РЅРёРё РіР»Р°РІРЅРѕРіРѕ РѕРєРЅР°
+	 * Функция, открывающая окно для выбора директории и при успешном 
+	 * выборе выводит название директории в названии главного окна
 	 */
 	private void openFindPathWindow(Shell shell) {
 		DirectoryDialog directoryDialog = new DirectoryDialog(shell);
 		String newPath;
 		if((newPath = directoryDialog.open()) != null) {
 			selectedPath = newPath;
-			shell.setText(windowTitle + " - " + selectedPath); // РІС‹РІРѕРґРёРј РІ РЅР°Р·РІР°РЅРёРµ РѕРєРЅР° С‚РµРєСѓС‰СѓСЋ РґРёСЂРµРєС‚РѕСЂРёСЋ
+			shell.setText(windowTitle + " - " + selectedPath); // выводим в название окна текущую директорию
 		}
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ Р·Р°РїСѓСЃРєР° РїРѕРёСЃРєР° С„Р°Р№Р»РѕРІ
-	 * @param inputText РўРµРєСЃС‚, РєРѕС‚РѕСЂС‹Р№ РЅРµРѕР±С…РѕРґРёРјРѕ РЅР°Р№С‚Рё
-	 * @param inputExtension РСЃРєРѕРјРѕРµ СЂР°СЃС€РёСЂРµРЅРёРµ С„Р°Р№Р»Р°
+	 * Функция запуска поиска файлов
+	 * @param inputText Текст, который необходимо найти
+	 * @param inputExtension Искомое расширение файла
 	 */
 	private void startFindFiles(Text inputText, Text inputExtension) {
-		if(threadPool != null) // РѕСЃС‚Р°РЅР°РІР»РёРІР°РµРј РїРѕС‚РѕРєРё
+		if(threadPool != null) // останавливаем потоки
 			threadPool.shutdownNow();
-		threadPool = Executors.newFixedThreadPool(3); // СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј С„РёРєСЃРёСЂРѕРІР°РЅС‹Р№ СЂР°Р·РјРµСЂ РїСѓР»Р° РїРѕС‚РѕРєРѕРІ
-		FindFiles.getInstance().stopSearch(); // РѕСЃС‚Р°РЅР°РІР»РёРІР°РµРј С‚РµРєСѓС‰РёР№ РїРѕРёСЃРє С„Р°Р№Р»РѕРІ
+		threadPool = Executors.newFixedThreadPool(3); // устанавливаем фиксированый размер пула потоков
+		FindFiles.getInstance().stopSearch(); // останавливаем текущий поиск файлов
 
-		String textToFind = inputText.getText(); // РїРѕР»СѓС‡Р°РµРј С‚РµРєСЃС‚, РєРѕС‚РѕСЂС‹Р№ РЅР°РґРѕ РЅР°Р№С‚Рё
-		String extension = inputExtension.getText().replaceAll("[\\\\/:?\"<>|]", ""); // СѓР±РёСЂР°РµРј РёР· СЂР°СЃС€РёСЂРµРЅРёСЏ РЅРµРЅСѓР¶РЅС‹Рµ СЃРёРјРІРѕР»С‹
-		inputExtension.setText(extension); // РїРѕР»СѓС‡Р°РµРј СЂР°СЃС€РёСЂРµРЅРёРµ
+		String textToFind = inputText.getText(); // получаем текст, который надо найти
+		String extension = inputExtension.getText().replaceAll("[\\\\/:?\"<>|]", ""); // убираем из расширения ненужные символы
+		inputExtension.setText(extension); // получаем расширение
 		
-		if(extension == "") // РµСЃР»Рё СЂР°СЃС€РёСЂРµРЅРёРµ РЅРµ РІРІРµРґРµРЅРѕ
-			showTooltip(inputExtension, "РќРµРѕР±С…РѕРґРёРјРѕ РІРІРµСЃС‚Рё СЂР°СЃС€РёСЂРµРЅРёРµ!"); // РІС‹РІРѕРґРёРј С‚СѓР»С‚РёРї СЃ РѕС€РёР±РєРѕР№
+		if(extension == "") // если расширение не введено
+			showTooltip(inputExtension, "Необходимо ввести расширение!"); // выводим тултип с ошибкой
 		else
-			if(textToFind != "") { // РµСЃР»Рё С‚РµРєСЃС‚ РІРІРµРґС‘РЅ
-				changeButton(true); // РёР·РјРµРЅСЏРµРј С‚РµРєСЃС‚ РІ РєРЅРѕРїРєРµ РїРѕРёСЃРєР°
+			if(textToFind != "") { // если текст введён
+				changeButton(true); // изменяем текст в кнопке поиска
 				
-				fileSystemTree.removeAll(); // РѕС‡РёС‰Р°РµРј РґРµСЂРµРІРѕ С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹
+				fileSystemTree.removeAll(); // очищаем дерево файловой системы
 				
-				threadPool.submit(() -> { // Р·Р°РїСѓСЃРєР°РµРј РїРѕС‚РѕРє РїРѕРёСЃРєР° С„Р°Р№Р»РѕРІ
+				threadPool.submit(() -> { // запускаем поток поиска файлов
 					FindFiles.getInstance().findFilesInDirectory(textToFind, selectedPath, "." + extension);
 				});
 				
-				threadPool.submit(() -> { // Р·Р°РїСѓСЃРєР°РµРј РїРѕС‚РѕРє РѕР±РЅРѕРІР»РµРЅРёСЏ СЃС‚Р°С‚СѓСЃР±Р°СЂР° РєР°Р¶РґС‹Рµ 0.5 СЃРµРє.
+				threadPool.submit(() -> { // запускаем поток обновления статусбара каждые 0.5 сек.
 					do {
 						updateStatusBar();
 						try {
@@ -534,7 +534,7 @@ public class MainWindow {
 					updateStatusBar();
 				});
 				
-				threadPool.submit(() -> { // Р·Р°РїСѓСЃРєР°РµРј РїРѕС‚РѕРє РѕР±РЅРѕРІР»РµРЅРёСЏ РґРµСЂРµРІР° С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹
+				threadPool.submit(() -> { // запускаем поток обновления дерева файловой системы
 					while(!Thread.currentThread().isInterrupted() && (FindFiles.getInstance().processing || !FindFiles.getInstance().isQueueEmpty())) 
 						if(!FindFiles.getInstance().isQueueEmpty())
 							Display.getDefault().syncExec(() -> {
@@ -548,30 +548,30 @@ public class MainWindow {
 				});
 			}	
 			else 
-				showTooltip(inputText, "РќРµРѕР±С…РѕРґРёРјРѕ РІРІРµСЃС‚Рё С‚РµРєСЃС‚!"); // РІС‹РІРѕРґРёРј С‚СѓР»Р±Р°СЂ СЃ РѕС€РёР±РєРѕР№
+				showTooltip(inputText, "Необходимо ввести текст!"); // выводим тулбар с ошибкой
 	}	
 	
 	/**
-	 * РћР±РЅРѕРІР»РµРЅРёРµ РґРµСЂРµРІР° С„Р°Р№Р»РѕРІРѕР№ СЃРёСЃС‚РµРјС‹
-	 * @param path РџСѓС‚СЊ Рє С„Р°Р№Р»Сѓ
+	 * Обновление дерева файловой системы
+	 * @param path Путь к файлу
 	 */
 	private synchronized void updateFileSystemTree(Path path) {
 		if(path == null || fileSystemTree == null || (fileSystemTree != null && fileSystemTree.isDisposed()) 
 				|| Thread.currentThread().isInterrupted())
 			return;
-		String[] pathToFile = path.toString().split("\\\\"); // РґРµР»РёРј СЃС‚СЂРѕРєСѓ РїРѕ \\
+		String[] pathToFile = path.toString().split("\\\\"); // делим строку по \\
 
 		TreeItem treeItem = null;
-		TreeItem[] treeItems = fileSystemTree.getItems(); // РїРѕР»СѓС‡Р°РµРј РІСЃРµ РєРѕСЂРЅРµРІС‹Рµ СЌР»РµРјРµРЅС‚С‹
-		if(treeItems.length == 0) { // РµСЃР»Рё РєРѕСЂРЅРµРІС‹С… СЌР»РµРјРµРЅС‚РѕРІ РЅРµС‚
-			treeItem =  new TreeItem(fileSystemTree, SWT.NONE); // СЃРѕР·РґР°С‘Рј РєРѕСЂРЅРµРІРѕР№ СЌР»РµРјРµРЅС‚
+		TreeItem[] treeItems = fileSystemTree.getItems(); // получаем все корневые элементы
+		if(treeItems.length == 0) { // если корневых элементов нет
+			treeItem =  new TreeItem(fileSystemTree, SWT.NONE); // создаём корневой элемент
 			treeItem.setText(pathToFile[0] + "\\");
 			for(int i = 1; i < pathToFile.length; i++) {
 				treeItem = new TreeItem(treeItem, 0);
 				treeItem.setText(pathToFile[i] + "\\");
 			}
 		}
-		else { // РѕР±С…РѕРґРёРј РґРµСЂРµРІРѕ Рё РїСЂРѕРІРµСЂСЏРµРј, РµСЃС‚СЊ Р»Рё СЃРѕРІРїР°РґРµРЅРёСЏ РїСѓС‚РµР№
+		else { // обходим дерево и проверяем, есть ли совпадения путей
 			treeItem = treeItems[0];
 			int k = 0;
 			for(int i = 0; i < treeItems.length  && k < pathToFile.length; ) {
@@ -586,18 +586,18 @@ public class MainWindow {
 					i++;
 			}
 			
-			// РґРѕР±Р°РІР»СЏРµРј РѕСЃС‚Р°РІС€РёРµСЃСЏ СЌР»РµРјРµРЅС‚С‹ РІ РґРµСЂРµРІРѕ
+			// добавляем оставшиеся элементы в дерево
 			for(; k < pathToFile.length; k++) {
 				treeItem = new TreeItem(treeItem, SWT.NONE);
 				treeItem.setText(pathToFile[k] + "\\");
 			}
 		}
-		treeItem.setText(treeItem.getText().substring(0, treeItem.getText().length() - 1));	 // СѓРґР°Р»СЏРµРј РёР· С‚РµРєСЃС‚Р° С„Р°Р№Р»Р° \\
-		treeItem.setData(path.toString()); // СЃРѕС…СЂР°РЅСЏРµРј РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ
+		treeItem.setText(treeItem.getText().substring(0, treeItem.getText().length() - 1));	 // удаляем из текста файла \\
+		treeItem.setData(path.toString()); // сохраняем путь к файлу
 	}
 	
 	/**
-	 * Р¤СѓРЅРєС†РёСЏ РѕР±РЅРѕРІР»РµРЅРёСЏ СЃС‚Р°С‚СѓСЃР±Р°СЂР°
+	 * Функция обновления статусбара
 	 */
 	private synchronized void updateStatusBar() {
 		if(!Thread.currentThread().isInterrupted())
@@ -606,11 +606,11 @@ public class MainWindow {
 						(toolBarText != null && toolBarText.isDisposed()))
 					return;
 				FindFiles instance = FindFiles.getInstance();
-			toolBarText.setText("Р¤Р°Р№Р»РѕРІ РѕР±СЂР°Р±Р°С‚С‹РІР°РµС‚СЃСЏ: " + instance.filesInProgressCount + 
-								". Р¤Р°Р№Р»РѕРІ РѕР±СЂР°Р±РѕС‚Р°РЅРѕ: " + instance.filesDoneCount + 
-								". Р’СЂРµРјРµРЅРё Р·Р°С‚СЂР°С‡РµРЅРѕ: " + (System.nanoTime() - instance.startedTime)/1_000_000_000 + " СЃРµРє.");
+			toolBarText.setText("Файлов обрабатывается: " + instance.filesInProgressCount + 
+								". Файлов обработано: " + instance.filesDoneCount + 
+								". Времени затрачено: " + (System.nanoTime() - instance.startedTime)/1_000_000_000 + " сек.");
 			if(!instance.processing)
-				toolBarText.setText(toolBarText.getText() + " РџРѕРёСЃРє Р·Р°РІРµСЂС€С‘РЅ.");
+				toolBarText.setText(toolBarText.getText() + " Поиск завершён.");
 			});
 	}
 }	
