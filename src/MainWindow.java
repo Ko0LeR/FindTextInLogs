@@ -520,11 +520,11 @@ public class MainWindow {
 				
 				fileSystemTree.removeAll(); // очищаем дерево файловой системы
 				
-				threadPool.submit(() -> { // запускаем поток поиска файлов
+				threadPool.execute(() -> { // запускаем поток поиска файлов
 					FindFiles.getInstance().findFilesInDirectory(textToFind, selectedPath, "." + extension);
 				});
 				
-				threadPool.submit(() -> { // запускаем поток обновления статусбара каждые 0.5 сек.
+				threadPool.execute(() -> { // запускаем поток обновления статусбара каждые 0.5 сек.
 					do {
 						updateStatusBar();
 						try {
@@ -535,7 +535,7 @@ public class MainWindow {
 					updateStatusBar();
 				});
 				
-				threadPool.submit(() -> { // запускаем поток обновления дерева файловой системы
+				threadPool.execute(() -> { // запускаем поток обновления дерева файловой системы
 					while(!Thread.currentThread().isInterrupted() && (FindFiles.getInstance().processing || !FindFiles.getInstance().isQueueEmpty())) 
 						if(!FindFiles.getInstance().isQueueEmpty())
 							Display.getDefault().syncExec(() -> {
@@ -556,7 +556,8 @@ public class MainWindow {
 	 * Обновление дерева файловой системы
 	 * @param path Путь к файлу
 	 */
-	private synchronized void updateFileSystemTree(Path path) {
+	private synchronized void updateFileSystemTree(FindedFile findedFile) {
+		Path path = findedFile.pathToFile;
 		if(path == null || fileSystemTree == null || (fileSystemTree != null && fileSystemTree.isDisposed()) 
 				|| Thread.currentThread().isInterrupted())
 			return;
@@ -614,4 +615,4 @@ public class MainWindow {
 				toolBarText.setText(toolBarText.getText() + " Поиск завершён.");
 			});
 	}
-}	
+}

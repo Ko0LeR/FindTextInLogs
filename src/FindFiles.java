@@ -1,25 +1,11 @@
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
 import java.util.concurrent.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Класс для осуществления поиска файлов с нужным расширением
@@ -39,10 +25,8 @@ public class FindFiles {
 	public volatile int	totalFiles = 0; 
 	/** начальное время работы */
 	public volatile long startedTime = System.nanoTime(); 
-	/** сколько байт читаем за 1 раз из файла */
-	public static volatile int maxBts = 20_000_000;
 	/** пул потоков поиска текста в файле */
-	private ExecutorService threadPool; 
+	private ExecutorService threadPool, largeFilesPool; 
 	/** текст, который необходимо найти */
 	private String textToFind;	
 	/** instance для реализации синглтона */
@@ -62,9 +46,15 @@ public class FindFiles {
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attr) {
 			if(file.toString().endsWith(extension)) { // если файл имеет нужное расширение
 				totalFiles++; // увеличиваем количество найденных файлов с таким расширением
-				threadPool.execute(() -> { // в пул добавляем новую задачу поиска текста в файле
-					checkFileForNeedText(file);
-				});
+				// в пул добавляем новую задачу поиска текста в файле
+				if(file.toFile().length() < 50_000_000) 
+					threadPool.execute(() -> { 
+						checkFileForNeedText(file);
+					});
+				else 
+					largeFilesPool.execute(() -> { // в пул добавляем новую задачу поиска текста в файле
+						checkFileForNeedText(file);
+					});
 			}			
 			if(Thread.currentThread().isInterrupted()) 
 				return FileVisitResult.TERMINATE;
@@ -118,12 +108,12 @@ public class FindFiles {
 		Path path = Paths.get(pathToDir);
 		filesInProgressCount = 0;
 		filesDoneCount = 0;
-		startedTime = System.nanoTime();
 		this.textToFind = textToFind;
 		queue.clear();
 		totalFiles = 0;
-		// создаём пул потоков по количеству ядер процессора
+		startedTime = System.nanoTime(); 
 		threadPool = Executors.newCachedThreadPool();
+		largeFilesPool = Executors.newSingleThreadExecutor();
 		try {			
 			// запускаем обход дерева
 			Files.walkFileTree(path, new TreeWalker(extension));
@@ -165,17 +155,16 @@ public class FindFiles {
 	 * @param path Путь к файлу
 	 */
 	private void checkFileForNeedText(Path path) {
-		synchronized(FindFiles.class) {
-			filesInProgressCount++;
-		}
+		filesInProgressCount++;
 		long posInFile = -1;
 		// если файл найден и поток не прерван, добавляем файл в очередь
 		if((posInFile = findText(path.toString(), textToFind)) != -1 && !Thread.currentThread().isInterrupted())
 			addToQueue(path, posInFile);
-		synchronized(FindFiles.class) {
+		if(filesInProgressCount - 1 >= 0)
 			filesInProgressCount--;
-			filesDoneCount++;
-		}
+		if(Thread.currentThread().isInterrupted())
+			return;
+		filesDoneCount++;
 		try {
 			Thread.sleep(100);
 		} catch (InterruptedException e) { }
@@ -191,42 +180,46 @@ public class FindFiles {
 	 */
 	private long findText(String path, String inputStr) {
 		byte[] inputStrByte = inputStr.getBytes(); // переводим строку в байты
-		long time = System.nanoTime();
 		try(RandomAccessFile file = new RandomAccessFile(path, "r")){ // открываем файл для чтения
-			if(file.getChannel().size() <= Integer.MAX_VALUE) {
-				return findInFile(inputStrByte, file, 0, file.getChannel().size());
-
-			}else {
-				long remain = file.getChannel().size();
-				for(long i = 0; i < file.getChannel().size(); i += Integer.MAX_VALUE) {
-					remain -= Integer.MAX_VALUE;
-					if(remain >= Integer.MAX_VALUE)
-						findInFile(inputStrByte, file, i, Integer.MAX_VALUE);
+			if(file.getChannel().size() <= Integer.MAX_VALUE) // если размер файла меньше Integer.MAX_VALUE
+				return findInFile(inputStrByte, file, 0, file.getChannel().size()); // ищем текст в файле и возвращаем результат
+			else {
+				long filePos = -1;
+				for(long i = 0; i < file.getChannel().size(); i += Integer.MAX_VALUE) { // делим файл на части и обрабатываем каждую
+					if(i + Integer.MAX_VALUE <= file.getChannel().size())
+						filePos = findInFile(inputStrByte, file, i, Integer.MAX_VALUE);
 					else
-						findInFile(inputStrByte, file, i, remain);
+						filePos = findInFile(inputStrByte, file, i, file.getChannel().size() - i);
+					if(filePos != -1)
+						return filePos;
 				}
-				file.getChannel().close();
-				file.close();
 			}
+			file.getChannel().close();
 		}catch(IOException e) {
 			return -1;
 		}
-		
-		System.out.println("TIME: " + (System.nanoTime() - time)/1000000000.0 + " at " + path);
 		return -1;
  	}	
-	
-	long findInFile(byte[] inputStrByte, RandomAccessFile file, long from, long size) throws IOException {
-		MappedByteBuffer buffer = file.getChannel().map(MapMode.READ_ONLY, from, size);
-		byte[] buf = new byte[inputStrByte.length];
-		buf[0] = inputStrByte[0];
+
+	/**
+	 * Функция поиска текста в файле
+	 * @param inputStrByte Искомая строка в байтах
+	 * @param file Файл, откуда читаем
+	 * @param from С какой позиции надо читать
+	 * @param size Сколько байт надо читать
+	 * @return Позиция в файле или -1, если текст не найден
+	 */
+	private long findInFile(byte[] inputStrByte, RandomAccessFile file, long from, long size) throws IOException {
+		MappedByteBuffer buffer = file.getChannel().map(MapMode.READ_ONLY, from, size); // открываем регион файла только для чтения
+		byte[] buf = new byte[inputStrByte.length]; // сюда будем записывать строку из файла
+		buf[0] = inputStrByte[0]; // первый символ строки неизменный
 		while(!Thread.currentThread().isInterrupted() && buffer.hasRemaining() && buffer.remaining() >= buf.length) {
-			if(buffer.get() == inputStrByte[0]) {
-				buffer.mark();
-				buffer.get(buf, 1, buf.length - 1);
-				buffer.reset();
-				if(Arrays.equals(buf, inputStrByte)) 
-					return buffer.position();
+			if(buffer.get() == inputStrByte[0]) { // если считанный байт совпал с началом строки
+				buffer.mark(); // запоминаем текущую позицию
+				buffer.get(buf, 1, buf.length - 1); // считываем остаток строки
+				buffer.reset();	// возвращаемся к запомненной позиции
+				if(Arrays.equals(buf, inputStrByte)) // если строки совпали
+					return buffer.position(); 
 			}						
 		}
 		return -1;
@@ -234,11 +227,12 @@ public class FindFiles {
 	
 	/** Функция остановки поиска */
 	public void stopSearch() {
-		if(threadPool != null) {
+		if(threadPool != null) 
 			threadPool.shutdownNow();
-			searching = false;
-			processing = false;
-			filesInProgressCount = 0;
-		}
+		if(largeFilesPool != null)
+			largeFilesPool.shutdownNow();
+		searching = false;
+		processing = false;
+		filesInProgressCount = 0;
 	}
 }
