@@ -1,6 +1,8 @@
 import org.eclipse.swt.widgets.*;
 
 import java.io.*;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel.MapMode;
 import java.nio.file.*;
 import java.util.Arrays;
 import java.util.concurrent.*;
@@ -13,7 +15,13 @@ import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
 
 public class MainWindow {
-	
+	private final String PAGE_TEXT = "Page",
+						 TOTALPAGES_TEXT = "TotalPages",
+						 PATH_TEXT = "Path",
+						 RUNNINGTHREAD_NAME = "RunningThread",
+						 OFFSET_TEXT = "Offset",
+						 STARTSEARCHTEXT = "Начать поиск", 
+						 STOPSEARCHTEXT = "Остановить поиск";
 	/** Выбранный путь для поиска */
 	private String selectedPath;
 	/** Название окна */
@@ -34,14 +42,15 @@ public class MainWindow {
 			- обновление дерева файловой системы  */
 	private ExecutorService threadPool;
 	
-	private final String startSearchTextButton = "Начать поиск", stopSearchTextButton = "Остановить поиск";
+	private final int maxElems = 50_000_000, // количество байт, читаемых за 1 раз
+			maxCapacity = 100_000_000; // максимальное количество байт, которое будем выводить на одну страницу
 	
-	private final int maxElems = 1_000_000, // количество байт, читаемых за 1 раз
-			maxCapacity = 200_000_000; // максимальное количество байт, которое будем выводить на одну страницу
+	private volatile int maxCharsAtOneMoment = 400_000_000;
+	private volatile int curChars = 0;
 	
 	/** Конструктор главного окна приложения */
 	public MainWindow() {		
-		final Display display = Display.getDefault();		
+		final Display display = Display.getDefault();	
 		final Shell shell = new Shell();
 		shell.setSize(800, 600); // устанавливаем начальный размер окна
 		shell.setText(windowTitle); // устанавливаем название окна
@@ -103,11 +112,11 @@ public class MainWindow {
 	        inputExtension.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false));
 	        
 	        searchButton = new Button(header, SWT.NONE); // кнопка начала поиска
-	        searchButton.setText(startSearchTextButton);
+	        searchButton.setText(STARTSEARCHTEXT);
 	        searchButton.addSelectionListener(new SelectionAdapter() {
 	        	@Override
 	        	public void widgetSelected(SelectionEvent e) { // при нажатии на кнопку
-		        	if(searchButton.getText().equals(startSearchTextButton)) { // если мы не в процессе поиска
+		        	if(searchButton.getText().equals(STARTSEARCHTEXT)) { // если мы не в процессе поиска
 		        		if(selectedPath == null) { // если путь не выбран
 		        			openFindPathWindow(shell); // открываем окно выбора пути
 		        			if(selectedPath == null) { // если путь до сих пор не выбран
@@ -132,9 +141,9 @@ public class MainWindow {
 	private void changeButton(boolean searchStarted) {
 		if(searchButton != null && !searchButton.isDisposed()) {
 			if(searchStarted) 
-				searchButton.setText(stopSearchTextButton);
+				searchButton.setText(STOPSEARCHTEXT);
 			else 
-				searchButton.setText(startSearchTextButton);
+				searchButton.setText(STARTSEARCHTEXT);
 			searchButton.pack(); // изменяем размер кнопки под новый текст
 		}
 	}
@@ -152,32 +161,67 @@ public class MainWindow {
 	 * Фукнция открытия файла в новой вкладке
 	 * @param pathToFile
 	 */
-	private void openFileInNewTab(String pathToFile) {
+	private void openFileInNewTab(String pathToFile, long offset) {
 		for(int i = 0; i < tabFolder.getItemCount(); i++) // если такой файл уже открыт, то второй раз не откроем
-			if(tabFolder.getItem(i).getData("Path").toString().equals(pathToFile))
+			if(tabFolder.getItem(i).getData(PATH_TEXT).toString().equals(pathToFile))
 				return;
 		CTabItem newTab = new CTabItem(tabFolder, SWT.CLOSE); // создаём новую вкладку
 		
 		Composite compositePage = new Composite(tabFolder, SWT.NONE);
 		compositePage.setLayout(new GridLayout());
 		
-		Text textBrowser = new Text(compositePage, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL ); // создаём место для текста в новой вкладке
-		textBrowser.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true)); // растягиваем его
-		
-		newTab.setData("Path", pathToFile); // запоминаем путь к файлу
+		Composite textFolder = new Composite(compositePage, SWT.NONE);
+		textFolder.setLayout(new GridLayout());
+		textFolder.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true)); // растягиваем его
+
+		newTab.setData(PATH_TEXT, pathToFile); // запоминаем путь к файлу
+		newTab.setData(OFFSET_TEXT, offset);
 		newTab.setText(pathToFile.substring(pathToFile.lastIndexOf("\\") + 1, pathToFile.length())); // выводим название
 		newTab.addDisposeListener(new DisposeListener() { 
 			@Override
 			public void widgetDisposed(DisposeEvent e) { // если виджет уничтожен
-				textBrowser.setText(""); // удаляем текст
-				textBrowser.dispose(); // удаляем место для текста
-				Thread fileOpener = ((Thread) newTab.getData("RunningThread")); // получаем поток вывода файла
-				if(fileOpener != null && !fileOpener.isInterrupted()) // если он работает
-					((Thread) newTab.getData("RunningThread")).interrupt(); // прекращаем его работу
+				Thread fileOpener = ((Thread) newTab.getData(RUNNINGTHREAD_NAME)); // получаем поток вывода файла
+				if(fileOpener != null && !fileOpener.isInterrupted()) { // если он работает
+					fileOpener.interrupt(); // прекращаем его работу
+				}
+				StyledText text = ((StyledText) textFolder.getChildren()[0]);
+				curChars -= text.getCharCount();
+				text.setText(" ");
+				text.dispose(); // удаляем место для текста
+				textFolder.dispose();
+
+				compositePage.dispose();
+				newTab.dispose();
 			}
 		});
 		tabFolder.setSelection(newTab); // открываем новую вкладку
 		
+		// Если больше 1 странцы в файле
+		if((int)((new File(pathToFile).length()) / maxCapacity) > 0) 
+			createPagesButtons(compositePage, textFolder, true); // создаём кнопки перехода на новую странцу
+		else
+			createPagesButtons(compositePage, textFolder, false);
+		newTab.setControl(compositePage);
+		
+		readFromFileToTextBrowser(textFolder, pathToFile, newTab); // выводим файл
+	}
+	
+	private StyledText createNewTextBrowser(Composite textFolder) {
+		if(textFolder.getChildren().length > 0) {
+			StyledText oldText = (StyledText)textFolder.getChildren()[0];
+			if(oldText != null && !oldText.isDisposed()) {
+				if(oldText.getText().length() > 0)
+					oldText.dispose();
+				else
+					return oldText;
+			}
+		}
+		StyledText textBrowser = new StyledText(textFolder, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL | SWT.READ_ONLY); // создаём место для текста в новой вкладке
+		
+		textBrowser.setLayout(new GridLayout());
+		textBrowser.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true)); // растягиваем его
+		textBrowser.setText("");
+		textBrowser.setSize(textFolder.getSize());
 		textBrowser.addKeyListener(new KeyListener() {
 			@Override
 			public void keyPressed(KeyEvent e) { // ожидаем нажатия клавиш
@@ -193,53 +237,105 @@ public class MainWindow {
 			@Override
 			public void keyReleased(KeyEvent e) {}
 		});
-		
-		// Если больше 1 странцы в файле
-		if((int)((new File(pathToFile).length()) / maxCapacity)+1 > 1) 
-			createPagesButtons(compositePage, textBrowser); // создаём кнопки перехода на новую странцу
-		newTab.setControl(compositePage);
-		readFromFileToTextBrowser(textBrowser, pathToFile, newTab); // выводим файл
+		return textBrowser;
 	}
 	
 	/** Функция создания кнопок перелистывания страниц под текстом */
-	private void createPagesButtons(Composite parent, Text textBrowser) {
+	private void createPagesButtons(Composite parent, Composite textFolder, boolean needToMakeButtons) {
         Composite buttonsComposite = new Composite(parent, SWT.NONE);
-        buttonsComposite.setLayout(new GridLayout(3, false));
+        buttonsComposite.setLayout(new GridLayout(4, false));
         GridData gridData = new GridData(SWT.FILL, SWT.FILL, true, false);
         buttonsComposite.setLayoutData(gridData);
-
-        
-        Label buttonBack = new Label(buttonsComposite, SWT.NONE); // кнопка "назад"
-        Label buttonForward = new Label(buttonsComposite, SWT.NONE); // кнопка "вперёд"
-        buttonsStatusText = new Label(buttonsComposite, SWT.NONE); // label вывода страниц
-        buttonsStatusText.setText("Страница:");
-        
-        buttonBack.setImage(new Image(Display.getDefault(), ".\\img\\back.png"));
-        buttonBack.setVisible(false); // скрываем кнопку назад (мы же точно будем на 1 странице)
-        buttonBack.setToolTipText("Перейти на предыдущую страницу");
-        buttonBack.addMouseListener(new MouseAdapter() {
+        final Label buttonBack; // кнопка "назад"
+        final Label buttonForward; // кнопка "вперёд"
+        if(needToMakeButtons) {
+	        buttonBack = new Label(buttonsComposite, SWT.NONE); // кнопка "назад"
+	        buttonForward = new Label(buttonsComposite, SWT.NONE); // кнопка "вперёд"
+	        buttonsStatusText = new Label(buttonsComposite, SWT.NONE); // label вывода страниц
+	        buttonsStatusText.setText("Страница:");
+	        
+	        buttonBack.setImage(new Image(Display.getDefault(), ".\\img\\back.png"));
+	        buttonBack.setVisible(false); // скрываем кнопку назад (мы же точно будем на 1 странице)
+	        buttonBack.setToolTipText("Перейти на предыдущую страницу");
+	        buttonBack.addMouseListener(new MouseAdapter() {
+	        	@Override
+	        	public void mouseDown(MouseEvent e) { // при нажатии на кнопку "на страницу назад"
+	        		CTabItem selectedTab = tabFolder.getSelection(); 
+	        		if(selectedTab != null) {
+	        			// переходим назад на одну страницу
+	        			openPage(selectedTab, (int)selectedTab.getData(PAGE_TEXT) - 1, new Label[] {buttonBack, buttonForward});
+	        			readFromFileToTextBrowser(textFolder, (String)selectedTab.getData(PATH_TEXT), selectedTab); // выводим новую страницу из файла
+	        		}
+	        	}
+	        });        
+	        
+	        buttonForward.setImage(new Image(Display.getDefault(), ".\\img\\forward.png"));
+	        buttonForward.setToolTipText("Перейти на следующую страницу");
+	        buttonForward.addMouseListener(new MouseAdapter() {
+	        	@Override
+	        	public void mouseDown(MouseEvent e) { // при нажатии на кнопку "на страницу вперёд"
+	        		CTabItem selectedTab = tabFolder.getSelection();
+	        		if(selectedTab != null) {
+	        			// переходим вперёд на одну странцу
+	        			openPage(selectedTab, (int)selectedTab.getData(PAGE_TEXT) + 1, new Label[] {buttonBack, buttonForward});
+	        			readFromFileToTextBrowser(textFolder, (String)selectedTab.getData(PATH_TEXT), selectedTab); // выводим новую страницу из файла
+	        		}
+	        	}
+	        });
+        } 
+        else {
+        	buttonBack = null;
+            buttonForward = null;
+        }
+        Label buttonGoToText = new Label(buttonsComposite, SWT.NONE); // кнопка "Перейти к тексту"
+        buttonGoToText.setImage(new Image(Display.getDefault(), ".\\img\\goToString.png"));
+        buttonGoToText.setToolTipText("Перейти к найденному тексту");
+        buttonGoToText.addMouseListener(new MouseAdapter() {
         	@Override
-        	public void mouseDown(MouseEvent e) { // при нажатии на кнопку "на страницу назад"
-        		CTabItem selectedTab = tabFolder.getSelection(); 
-        		if(selectedTab != null)
-        			// переходим назад на одну страницу
-        			openPage(textBrowser, (String)selectedTab.getData("Path"), selectedTab, false, 
-        					new Label[] {buttonBack, buttonForward});
-        	}
-        });        
-        
-        buttonForward.setImage(new Image(Display.getDefault(), ".\\img\\forward.png"));
-        buttonForward.setToolTipText("Перейти на следующую страницу");
-        buttonForward.addMouseListener(new MouseAdapter() {
-        	@Override
-        	public void mouseDown(MouseEvent e) { // при нажатии на кнопку "на страницу вперёд"
+        	public void mouseDown(MouseEvent e) { // при нажатии на кнопку "Перейти к тексту"
         		CTabItem selectedTab = tabFolder.getSelection();
-        		if(selectedTab != null)
-        			// переходим вперёд на одну странцу
-        			openPage(textBrowser, (String)selectedTab.getData("Path"), selectedTab, true, 
-        					new Label[] {buttonBack, buttonForward});
+        		long offset = (long)selectedTab.getData(OFFSET_TEXT);
+        		int page = (int)selectedTab.getData(PAGE_TEXT);
+        		if(page != (int)(offset / maxCapacity) + 1) {
+        			openPage(selectedTab, (int)(offset / maxCapacity) + 1, new Label[] {buttonBack, buttonForward});
+        			readFromFileToTextBrowser(textFolder, (String)selectedTab.getData(PATH_TEXT), selectedTab); // выводим новую страницу из файла
+        		}
+        		StyledText text = ((StyledText) textFolder.getChildren()[0]);
+        		text.setCaretOffset((int) (offset - (int)(offset / maxCapacity) * maxCapacity) - 1);
+        		text.setFocus();
+        		text.showSelection();
         	}
         });
+	}
+	
+	
+	/**
+	 * Функция открытия новой страницы файла
+	 * @param textBrowser Место для текста
+	 * @param path Путь к файлу
+	 * @param tab Вкладка, в которую выводим
+	 * @param next Следующая странца - true; Предыдущая - false
+	 * @param buttons 
+	 */
+	private void openPage(CTabItem tab, int page, Label[] buttons) {
+		int totalPages = (int)tab.getData(TOTALPAGES_TEXT); // получаем полное количество страниц
+		if(page > totalPages || page < 1)
+			return;
+		tab.setData(PAGE_TEXT, page); // сохраняем текущую страницу
+		if(page == 1) {
+			buttons[0].setVisible(false);
+			buttons[1].setVisible(true);
+		}
+		else
+			if(page == totalPages) {
+				buttons[0].setVisible(true);
+				buttons[1].setVisible(false);
+			}
+			else {
+				buttons[0].setVisible(true);
+				buttons[1].setVisible(true);
+			}
+		updateButtonsStatus(tab);
 	}
 	
 	/**
@@ -249,45 +345,49 @@ public class MainWindow {
 	 * @param newTab вкладка, в которую выводится текст
 	 * @param buttonsComposite здесь находятся кнопки
 	 */
-	private void readFromFileToTextBrowser(Text textBrowser, String pathToFile, CTabItem newTab) {
-		final String runningThread = "RunningThread",
-					totalPages = "TotalPages",
-					namePage = "Page";
-		
-		Thread curThread = ((Thread) newTab.getData(runningThread)); // если поток запущен
+	private void readFromFileToTextBrowser(Composite textFolder, String pathToFile, CTabItem newTab) {
+		Thread curThread = ((Thread) newTab.getData(RUNNINGTHREAD_NAME)); // если поток запущен
 		if(curThread != null && !curThread.isInterrupted()) // прерываем его работу
 			curThread.interrupt();
 		
-		if(newTab.getData(namePage) == null) // если мы ещё не указывали номер страницы
-			newTab.setData(namePage, 1); // указываем номер страницы
-		int page = (int)newTab.getData(namePage); 
+		if(newTab.getData(PAGE_TEXT) == null) // если мы ещё не указывали номер страницы
+			newTab.setData(PAGE_TEXT, 1); // указываем номер страницы
+		int page = (int)newTab.getData(PAGE_TEXT); 
+		int totalPages = ((int)((new File(pathToFile).length()) / maxCapacity)+1);
 		
-		if(newTab.getData(totalPages) == null) // если ещё не указывали, сколько страниц в файле
-			newTab.setData(totalPages, ((int)((new File(pathToFile).length()) / maxCapacity)+1)); // указываем количество страниц в файле
-		if((int)newTab.getData(totalPages) > 1) { // если больше одной страницы
-			// выводим, на какой мы сейчас странице и сколько их всего
-			buttonsStatusText.setText("Страница " + (int)newTab.getData(namePage) + "/" + (int)newTab.getData(totalPages));
-			buttonsStatusText.pack(); // изменяем размер статусной строки
-		}
-
-		newTab.setData(runningThread,new Thread(() -> { // запускаем новый поток и запоминаем его
+		if(newTab.getData(TOTALPAGES_TEXT) == null)  // если ещё не указывали, сколько страниц в файле
+			newTab.setData(TOTALPAGES_TEXT, totalPages);  // указываем количество страниц в файле
+		
+		if(totalPages > 1)
+			updateButtonsStatus(newTab); // выводим информацию на экран
+		
+		StyledText textBrowser = createNewTextBrowser(textFolder);
+		
+		newTab.setData(RUNNINGTHREAD_NAME,new Thread(() -> { // запускаем новый поток и запоминаем его
 			byte[] bts = new byte[maxElems]; // массив байт, считанных из файла
 			try(RandomAccessFile f = new RandomAccessFile(pathToFile, "r")){ // начинаем читать из файла
-				int i = 0;
-				if(page >= 1) // если мы не на первой странице
-					f.skipBytes((page - 1) * maxCapacity); // смещаемся по файлу
-				Display.getDefault().syncExec(() -> { textBrowser.setText("");}); // очищаем место для текста
-				// пока поток не завершён и можно читать из файла и мы не превысили максимальное количество байт
-				while(!Thread.currentThread().isInterrupted() && f.read(bts) != -1 && i * maxElems < maxCapacity) {
-					i++; // сколько раз считали из файла
+				int fileMapSize = 0;
+				fileMapSize  = (totalPages == 1) ? (int)f.length() : (page < totalPages) ? maxCapacity : (int)f.length() - (page - 1) * maxCapacity;
+				MappedByteBuffer buffer = f.getChannel().map(MapMode.READ_ONLY, (page - 1) * maxCapacity, fileMapSize);
+				// пока поток не завершён и можно читать из файла
+				while(!Thread.currentThread().isInterrupted() && buffer.hasRemaining()) {
+					while(curChars > maxCharsAtOneMoment) { // пока считанных символов больше, чем может быть во вкладках
+						Thread.sleep(500); // спим
+					}
+					if(buffer.remaining() > maxElems)
+						buffer.get(bts);
+					else {
+						Arrays.fill(bts, (byte)0); // заполняем массив нулями
+						buffer.get(bts, 0, buffer.remaining());
+					}
 					appendStr(textBrowser, bts); // добавляем строку к тексту 
-					Arrays.fill(bts, (byte)0); // заполняем массив нулями
-				}			
+				}
+				Arrays.fill(bts, (byte)0); // заполняем массив нулями
 				bts = null;
 			}
-			catch(IOException e){ }
+			catch(IOException e){ } catch (InterruptedException e) { }
 		}));
-		((Thread) newTab.getData(runningThread)).start(); // запускаем поток
+		((Thread) newTab.getData(RUNNINGTHREAD_NAME)).start(); // запускаем поток
 	}
 
 	/**
@@ -295,12 +395,11 @@ public class MainWindow {
 	 * @param textBrowser Куда выводим текст
 	 * @param byteStr Здесь хранится строка
 	 */
-	private void appendStr(Text textBrowser, byte[] byteStr) {
+	private void appendStr(StyledText textBrowser, byte[] byteStr) {
 		Display.getDefault().syncExec(() -> {
 			if(textBrowser != null && !textBrowser.isDisposed()) { // если есть, куда выводить
-				textBrowser.setVisible(false); // скрываем виджет для того, чтобы курсор не переносился к добавленному тексту
 				textBrowser.append(new String(byteStr)); // добавляем новую строку
-				textBrowser.setVisible(true); // делаем виджет видимым
+				curChars += textBrowser.getCharCount();
 			}
 		});
 	}
@@ -353,7 +452,7 @@ public class MainWindow {
 				TreeItem selectedItem = fileSystemTree.getItem(new Point(e.x, e.y)); // получаем Item по координатам мыши
 				// если попали по Item и это файл, то открываем его в новой вкладке
 				if(selectedItem != null && selectedItem.getText().charAt(selectedItem.getText().length() - 1) != '\\')
-					openFileInNewTab((String)selectedItem.getData());
+					openFileInNewTab((String)selectedItem.getData(PATH_TEXT), (long)selectedItem.getData(OFFSET_TEXT));
 			}
 
 			@Override
@@ -410,7 +509,7 @@ public class MainWindow {
 					newItemOpenFile.addSelectionListener(new SelectionAdapter() {
 						@Override
 						public void widgetSelected(SelectionEvent e) {
-							openFileInNewTab((String)selectedTreeItems[0].getData()); // открываем файл, передавая путь к файлу
+							openFileInNewTab((String)selectedTreeItems[0].getData(PATH_TEXT), (long)selectedTreeItems[0].getData(OFFSET_TEXT)); // открываем файл, передавая путь к файлу
 						}
 					});
 				}
@@ -447,41 +546,11 @@ public class MainWindow {
         tabFolder.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
     }
 	
-	/**
-	 * Функция открытия новой страницы файла
-	 * @param textBrowser Место для текста
-	 * @param path Путь к файлу
-	 * @param tab Вкладка, в которую выводим
-	 * @param next Следующая странца - true; Предыдущая - false
-	 * @param buttons 
-	 */
-	private void openPage(Text textBrowser, String path, CTabItem tab, boolean next, Label[] buttons) {
-		int totalPages = (int)tab.getData("TotalPages"); // получаем полное количество страниц
-		int curPage = (int)tab.getData("Page"); // получаем текущую страницу
-		buttonsStatusText.setText("Страница " + (int)tab.getData("Page") + "/" + totalPages); // выводим их пользователю
+	/** Функция обновления надписи о текущей странице */
+	void updateButtonsStatus(CTabItem tab) {
+		buttonsStatusText.setText("Страница " + (int)tab.getData(PAGE_TEXT) + "/" + (int)tab.getData(TOTALPAGES_TEXT)); // выводим их пользователю
 		buttonsStatusText.pack(); // изменяем размер Label
-		if(next) { // если нужно перелистнуть страницу вперёд
-			if(curPage == totalPages) // если мы на последней странице - выходим
-				return;
-			buttons[0].setVisible(true); // делаем видимой кнопку "назад"
-			tab.setData("Page", curPage + 1); // увеличиваем текущую страницу
-			if((curPage + 1) == totalPages) // если мы оказались на последней странице
-				buttons[1].setVisible(false); // прячем кнопку "Вперед"
-			else
-				buttons[1].setVisible(true); // иначе показываем
-		} else {
-			if(curPage == 1) // если мы на первой странице - выходим
-				return;
-			tab.setData("Page", curPage - 1); // уменьшаем текущую страницу
-			if((curPage - 1) == 1) // если мы оказались на первой странице
-				buttons[0].setVisible(false); // прячем кнопку "назад"
-			else
-				buttons[0].setVisible(true); // показываем кнопку "назад"
-			buttons[1].setVisible(true); // показываем кнопку "вперёд"
-		}
-		buttonsStatusText.setText("Страница " + (int)tab.getData("Page") + "/" + totalPages); // выводим количество страниц ползователю
-		buttonsStatusText.pack(); // изменяем разер label
-		readFromFileToTextBrowser(textBrowser, path, tab/*, buttons[0].getParent()*/); // выводим новую страницу из файла
+		buttonsStatusText.getParent().pack();
 	}
 	
 	/**
@@ -543,8 +612,10 @@ public class MainWindow {
 									updateFileSystemTree(FindFiles.getInstance().getFromQueue());
 							});
 					Display.getDefault().syncExec(() -> {
-						if(!Thread.currentThread().isInterrupted())
+						if(!Thread.currentThread().isInterrupted()) {
 							changeButton(false);
+							threadPool.shutdownNow();
+						}
 					});
 				});
 			}	
@@ -595,7 +666,8 @@ public class MainWindow {
 			}
 		}
 		treeItem.setText(treeItem.getText().substring(0, treeItem.getText().length() - 1));	 // удаляем из текста файла \\
-		treeItem.setData(path.toString()); // сохраняем путь к файлу
+		treeItem.setData(PATH_TEXT, path.toString()); // сохраняем путь к файлу
+		treeItem.setData(OFFSET_TEXT, findedFile.offset);
 	}
 	
 	/**

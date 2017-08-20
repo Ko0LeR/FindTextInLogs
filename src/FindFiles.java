@@ -25,6 +25,8 @@ public class FindFiles {
 	public volatile int	totalFiles = 0; 
 	/** начальное врем€ работы */
 	public volatile long startedTime = System.nanoTime(); 
+	/** какой файл считаем большим */
+	private final int maxFileSize = 50_000_000;
 	/** пул потоков поиска текста в файле */
 	private ExecutorService threadPool, largeFilesPool; 
 	/** текст, который необходимо найти */
@@ -47,7 +49,7 @@ public class FindFiles {
 			if(file.toString().endsWith(extension)) { // если файл имеет нужное расширение
 				totalFiles++; // увеличиваем количество найденных файлов с таким расширением
 				// в пул добавл€ем новую задачу поиска текста в файле
-				if(file.toFile().length() < 50_000_000) 
+				if(file.toFile().length() < maxFileSize) 
 					threadPool.execute(() -> { 
 						checkFileForNeedText(file);
 					});
@@ -113,7 +115,8 @@ public class FindFiles {
 		totalFiles = 0;
 		startedTime = System.nanoTime(); 
 		threadPool = Executors.newCachedThreadPool();
-		largeFilesPool = Executors.newSingleThreadExecutor();
+		largeFilesPool = Executors.newSingleThreadExecutor(); // используем отдельный однопоточный пул
+															// дл€ файлов > ~50 ћб
 		try {			
 			// запускаем обход дерева
 			Files.walkFileTree(path, new TreeWalker(extension));
@@ -169,7 +172,7 @@ public class FindFiles {
 			Thread.sleep(100);
 		} catch (InterruptedException e) { }
 		if(totalFiles == filesDoneCount && !searching) 
-			processing = false;
+			stopSearch();
 	}
 	
 	/**
