@@ -42,7 +42,7 @@ public class MainWindow {
 			- обновление дерева файловой системы  */
 	private ExecutorService threadPool;
 	
-	private final int maxElems = 50_000_000, // количество байт, читаемых за 1 раз
+	private final int maxElems = 20_000_000, // количество байт, читаемых за 1 раз
 			maxCapacity = 100_000_000; // максимальное количество байт, которое будем выводить на одну страницу
 	
 	private volatile int maxCharsAtOneMoment = 400_000_000;
@@ -72,7 +72,7 @@ public class MainWindow {
 		
 		shell.open();
 		while (!shell.isDisposed()) 
-			if (!display.readAndDispatch()) 
+			if (!display.isDisposed() && !display.readAndDispatch()) 
 				display.sleep();
 		
 		if(display != null && !display.isDisposed()) 
@@ -177,6 +177,7 @@ public class MainWindow {
 		newTab.setData(PATH_TEXT, pathToFile); // запоминаем путь к файлу
 		newTab.setData(OFFSET_TEXT, offset);
 		newTab.setText(pathToFile.substring(pathToFile.lastIndexOf("\\") + 1, pathToFile.length())); // выводим название
+		newTab.setImage(new Image(Display.getDefault(), ".\\img\\tabLoading.gif"));
 		newTab.addDisposeListener(new DisposeListener() { 
 			@Override
 			public void widgetDisposed(DisposeEvent e) { // если виджет уничтожен
@@ -210,8 +211,10 @@ public class MainWindow {
 		if(textFolder.getChildren().length > 0) {
 			StyledText oldText = (StyledText)textFolder.getChildren()[0];
 			if(oldText != null && !oldText.isDisposed()) {
-				if(oldText.getText().length() > 0)
+				if(oldText.getText().length() > 0) {
+					curChars -= oldText.getCharCount();
 					oldText.dispose();
+				}
 				else
 					return oldText;
 			}
@@ -374,16 +377,16 @@ public class MainWindow {
 					while(curChars > maxCharsAtOneMoment) { // пока считанных символов больше, чем может быть во вкладках
 						Thread.sleep(500); // спим
 					}
-					if(buffer.remaining() > maxElems)
-						buffer.get(bts);
-					else {
-						Arrays.fill(bts, (byte)0); // заполняем массив нулями
-						buffer.get(bts, 0, buffer.remaining());
-					}
+					if(buffer.remaining() < maxElems)
+						bts = new byte[buffer.remaining()];
+					buffer.get(bts);
 					appendStr(textBrowser, bts); // добавляем строку к тексту 
 				}
 				Arrays.fill(bts, (byte)0); // заполняем массив нулями
-				bts = null;
+				Display.getDefault().syncExec(() -> {
+					if(!newTab.isDisposed())
+						newTab.setImage(null); 
+				}); // убираем картинку загрузки
 			}
 			catch(IOException e){ } catch (InterruptedException e) { }
 		}));
@@ -399,7 +402,7 @@ public class MainWindow {
 		Display.getDefault().syncExec(() -> {
 			if(textBrowser != null && !textBrowser.isDisposed()) { // если есть, куда выводить
 				textBrowser.append(new String(byteStr)); // добавляем новую строку
-				curChars += textBrowser.getCharCount();
+				curChars += byteStr.length;
 			}
 		});
 	}
